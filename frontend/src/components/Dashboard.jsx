@@ -54,23 +54,19 @@ const Dashboard = () => {
   const getRecommendation = async () => {
     try {
 
-      const res = await fetch("http://localhost:8001/stylegenie/trend_vector/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: [
-            formData.weather,
-            formData.occasion,
-            formData.location,
-            formData.occupation,
-            formData.gender,
-            bodyType
-          ].join(" ")
+    const structuredPrompt = `A ${formData.gender} with an ${bodyType} body shape wearing a fashionable outfit suitable for a ${formData.occasion} in ${formData.weather} at the ${formData.location}. They work as a ${formData.occupation}.`;
 
-        }),
-      });
+    const res = await fetch("http://localhost:8001/stylegenie/trend_vector/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: structuredPrompt
+      }),
+    });
+
+      
     const data = await res.json();
     setResults(data.results || []);
     setCurrentIndex(0);
