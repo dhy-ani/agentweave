@@ -8,6 +8,11 @@ src/firebase.js
 
 # testing
 /coverage
+/test/
+
+# Ignore Python bytecode cache
+__pycache__/
+**/__pycache__/
 
 # production
 /build

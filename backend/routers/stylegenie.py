@@ -1,18 +1,27 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+import os
+import sys
+import faiss
+import numpy as np
+import json
+from datetime import datetime
 import random
-# from openai import OpenAI
-# import os
-# from dotenv import load_dotenv
+from PIL import Image, UnidentifiedImageError
+import io
+import torchvision.transforms as transforms
+import torch
 
-from ai.extract_vector import extract_all_clip_vectors
-from ai.search_similar import search_similar_images  # or similar function
+# Fix path to import custom modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from ai.extract_vector import extract_text_vector
 
-# load_dotenv()
 router = APIRouter(prefix="/stylegenie", tags=["StyleGenie"])
 
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# -------------------------------
+# Pydantic Models
+# -------------------------------
 
 class StyleRequest(BaseModel):
     weather: str
@@ -21,107 +30,116 @@ class StyleRequest(BaseModel):
     occupation: str
     relevance: Optional[str] = "current"
 
-# Simulated outfit database (replace with real logic later)
-mock_outfits = {
-    "beach": ["Linen shirt + Shorts + Flip-flops", "Tank top + Swim trunks + Sunglasses"],
-    "formal": ["Navy suit + White shirt + Oxfords", "Blazer + Slacks + Loafers"],
-    "casual": ["Graphic tee + Jeans + Sneakers", "T-shirt + Chinos"],
-    "party": ["Silk blouse + Mini skirt + Heels", "Floral dress + Sandals"],
-    "office": ["Button-up + Trousers + Derbies", "Knit polo + Chinos"],
-    "rainy": ["Raincoat + Umbrella + Waterproof boots"],
-    "cold": ["Sweater + Wool coat + Boots", "Thermal shirt + Parka + Beanie"],
-    "hot": ["Sleeveless top + Shorts + Sandals", "Crop top + Linen pants"],
-    "sunny": ["Wrap dress + Sunglasses + Sandals", "Shorts + Printed shirt + Hat"]
-}
+class TrendPrompt(BaseModel):
+    prompt: str
 
-import faiss
-import numpy as np
-import json
+# -------------------------------
+# Load FAISS Index & Metadata
+# -------------------------------
 
-# Load FAISS index (or import a function that does it)
-faiss_index = faiss.read_index("backend/ai/data/trends.index")  # adjust path
+try:
+    faiss_index = faiss.read_index("ai/data/trends.index")
 
-# Load mapping files
-with open("backend/ai/data/index_to_caption.json") as f:
-    index_to_caption = json.load(f)
+    with open("ai/data/index_to_caption.json") as f:
+        index_to_caption = json.load(f)
+    with open("ai/data/index_to_image_path.json") as f:
+        index_to_image_path = json.load(f)
+    with open("ai/data/index_to_timestamp.json") as f:
+        index_to_timestamp = json.load(f)
+except Exception as e:
+    raise RuntimeError(f"Failed to load FAISS index or metadata: {e}")
 
-with open("backend/ai/data/index_to_image_path.json") as f:
-    index_to_image_path = json.load(f)
+# -------------------------------
+# Trend-Based Recommendation
+# -------------------------------
 
 @router.post("/trend_vector")
-async def recommend_outfit(request: Request):
-    data = await request.json()
-    prompt = data.get("prompt", "")
+async def recommend_outfit(data: TrendPrompt):
+    try:
+        prompt = data.prompt
+        if isinstance(prompt, list):
+            prompt = " ".join(prompt)
+        print("📨 Prompt received:", data.prompt)
+        
+        # 1. Vectorize prompt
+        vector = extract_text_vector(data.prompt)
+        vector = np.array(vector).flatten().astype(np.float32).reshape(1, -1)
 
-    # Convert to CLIP vector
-    vector = extract_all_clip_vectors(prompt)
+        # 2. FAISS search
+        D, I = faiss_index.search(vector, k=10)
+        print("🔍 FAISS search done. Distances:", D)
+        
+        
+        # 3. Prepare response fields
+        top_index = str(I[0][0])
+        image_path = index_to_image_path.get(top_index)
+        if not image_path:
+            raise HTTPException(status_code=500, detail=f"No image path found for index {top_index}")
 
-    # Search FAISS
-    D, I = faiss_index.search(np.array([vector]), k=1)
-    top_index = str(I[0][0])
+        filename = os.path.basename(image_path)
 
-    outfit = index_to_caption[top_index]
-    image_url = index_to_image_path[top_index]
+        image_url = filename
 
-    return {
-        "result": f"Here's a trending look: {outfit}",
-        "image": image_url,
-        "trendiness_score": round(random.uniform(0.75, 0.95), 2),
-        "future_projection": random.choice([
-            "This trend is exploding this season.",
-            "This style is gaining popularity.",
-            "Expected to stay consistent this quarter."
-        ]),
-        "source": "trend-vector"
-    }
+        outfit = index_to_caption[top_index]
 
-# @router.post("/")
-# async def generate_outfit(request: Request):
-#     data = await request.json()
-#     prompt = data.get("prompt")
+        # 4. Trendiness Score Calculation (timestamp-based)
+        timestamps = [
+            datetime.fromisoformat(index_to_timestamp[str(i)])
+            for i in I[0] if str(i) in index_to_timestamp
+        ]
+        
+        print("🕒 Found timestamps for:", len(timestamps))
+        now = datetime.now()
+        recencies = [(now - ts).days for ts in timestamps]
 
-#     try:
-#         # Attempt OpenAI call
-#         response = client.chat.completions.create(
-#             model="gpt-4",
-#             messages=[
-#                 {"role": "system", "content": "You are StyleGenie, a fashionable outfit recommendation expert."},
-#                 {"role": "user", "content": prompt}
-#             ]
-#         )
-#         return {
-#             "result": response.choices[0].message.content,
-#             "source": "openai"
-#         }
-#     except Exception as e:
-#         # Fallback logic using mock_outfits
-#         try:
-#             # Extract tags from the parsed data
-#             tags = []
-#             for key in ["weather", "occasion", "location", "occupation"]:
-#                 value = data.get(key, "").lower()
-#                 if value in prompt.lower():
-#                     tags.append(value)
+        def compute_trendiness_score(avg_days, scale=20):
+            score = 100 * np.exp(-avg_days / scale)
+            return round(score, 1)
 
-#             possible_looks = []
-#             for tag in tags:
-#                 if tag in mock_outfits:
-#                     possible_looks.extend(mock_outfits[tag])
+        if recencies:
+            avg_days = np.mean(recencies)
+            trendiness_score = compute_trendiness_score(avg_days)
+        else:
+            score_raw = float(D[0][0])
+            if not np.isfinite(score_raw) or score_raw < 0:
+                score_raw = 1.0
+            trendiness_score = round(100 * (1 - min(score_raw / 1.0, 1.0)), 1)
 
-#             if not possible_looks:
-#                 possible_looks = mock_outfits["casual"]
 
-#             outfit = random.choice(possible_looks)
 
-#             return {
-#                 "result": f"GPT is unavailable. Here's a backup outfit suggestion: {outfit}",
-#                 "trendiness_score": round(random.uniform(0.6, 0.95), 2),
-#                 "future_projection": random.choice([
-#                     "This style is gaining popularity.",
-#                     "Expected to stay consistent this season.",
-#                     "Trend may decline after this quarter."
-#                 ]),
-#                 "source": "fallback"
-#             }
-#         except Exception as fallback_error:
-#             return {"error": f"OpenAI failed and fallback also failed: {str(fallback_error)}"}
+
+        # 5. Projected future trend comment
+        future_projection = (
+            random.choice([
+                "This trend is exploding this season.",
+                "This style is gaining popularity.",
+                "Expected to stay consistent this quarter."
+            ]) if trendiness_score > 60 else
+            "This trend might be fading out. Try something else soon!"
+        )
+
+        # 6. Return result
+        
+        results = []
+        for idx in I[0][:10]:  # top 10 indices
+            idx_str = str(idx)
+            filename = os.path.basename(index_to_image_path[idx_str])
+            image_url = filename
+            outfit = index_to_caption[idx_str]
+            
+        result = {
+            "result": f"Here's a trending look: {outfit}",
+             "image": image_url,
+            "trendiness_score": trendiness_score,
+            "future_projection": future_projection,
+            "source": "trend-vector"
+        }
+        results.append(result)
+        
+        return { "results": results }
+        
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Trend vector search failed: {str(e)}")
+
+
