@@ -37,7 +37,15 @@ function LoginPage() {
       await signInWithPopup(auth, googleProvider);
       navigate('/dashboard');
     } catch (e) {
-      setError('Google sign-in failed.');
+      if (e.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorised in Firebase. Add it under Authentication → Authorized domains.');
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('Pop-up was blocked by your browser. Allow pop-ups for this site and try again.');
+      } else if (e.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in cancelled.');
+      } else {
+        setError(`Google sign-in failed: ${e.message}`);
+      }
     }
   };
 
