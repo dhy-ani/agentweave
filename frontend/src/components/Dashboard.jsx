@@ -97,6 +97,7 @@ async function patchBodyType(firebaseUser, bodyType, gender) {
 
 const Dashboard = () => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [tab, setTab] = useState("discover");
 
   const [bodyType, setBodyType]       = useState(null);
@@ -114,8 +115,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   // Sync Firebase user → SQL on mount / auth change
+  // authLoading prevents redirect on the first null emission before Firebase rehydrates
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthLoading(false);
       if (user) {
         setCurrentUser(user);
         syncUserToSQL(user);
@@ -190,6 +193,8 @@ const Dashboard = () => {
 
   const logout = () =>
     signOut(auth).then(() => navigate("/login")).catch(console.error);
+
+  if (authLoading) return <div className="min-h-screen bg-neutral-950" />;
 
   return (
     <div className="min-h-screen bg-neutral-950">
