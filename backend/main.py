@@ -19,20 +19,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    # 1. Create all SQL tables (idempotent — safe to run every boot)
     from db.database import engine, Base
-    import db.models  # register all ORM models
+    import db.models
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables ready.")
-
-    # 2. Warm up CLIP models so the first request isn't slow
-    try:
-        from ai.model_cache import get_text_model, get_image_model
-        get_text_model()
-        get_image_model()
-        print("✅ CLIP models loaded and cached.")
-    except Exception as e:
-        print(f"⚠️  Model warmup failed: {e}")
 
 # Routers
 from routers import user
