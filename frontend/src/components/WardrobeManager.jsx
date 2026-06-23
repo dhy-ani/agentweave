@@ -24,7 +24,7 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
     } catch {}
   };
 
-  useEffect(() => { fetchItems(); }, [uid]);
+  useEffect(() => { fetchItems(); }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFile = (e) => {
     const f = e.target.files[0];

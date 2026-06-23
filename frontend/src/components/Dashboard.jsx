@@ -131,7 +131,7 @@ const Dashboard = () => {
     if (currentUser && bodyType) {
       patchBodyType(currentUser, bodyType, form.gender);
     }
-  }, [bodyType]);
+  }, [bodyType, currentUser, form.gender]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleChange = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
