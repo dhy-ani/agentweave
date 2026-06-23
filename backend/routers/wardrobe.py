@@ -37,10 +37,13 @@ except Exception as e:
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
-def _get_user(firebase_uid: str, db: Session) -> User:
+def _get_or_create_user(firebase_uid: str, db: Session) -> User:
     user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found. Call /users/upsert first.")
+        user = User(firebase_uid=firebase_uid)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     return user
 
 
@@ -67,7 +70,7 @@ async def upload_clothing_item(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = _get_user(firebase_uid, db)
+    user = _get_or_create_user(firebase_uid, db)
 
     img_bytes = await file.read()
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -99,7 +102,7 @@ async def upload_clothing_item(
 
 @router.get("/items")
 def list_wardrobe_items(firebase_uid: str, db: Session = Depends(get_db)):
-    user = _get_user(firebase_uid, db)
+    user = _get_or_create_user(firebase_uid, db)
     items = (db.query(WardrobeItem)
              .filter(WardrobeItem.user_id == user.id)
              .order_by(WardrobeItem.added_at.desc())
@@ -111,7 +114,7 @@ def list_wardrobe_items(firebase_uid: str, db: Session = Depends(get_db)):
 
 @router.delete("/items/{item_uuid}")
 def delete_wardrobe_item(item_uuid: str, firebase_uid: str, db: Session = Depends(get_db)):
-    user = _get_user(firebase_uid, db)
+    user = _get_or_create_user(firebase_uid, db)
     item = db.query(WardrobeItem).filter(
         WardrobeItem.item_uuid == item_uuid,
         WardrobeItem.user_id == user.id,
@@ -141,7 +144,7 @@ class SuggestRequest(BaseModel):
 
 @router.post("/suggest")
 def suggest_outfit_from_wardrobe(data: SuggestRequest, db: Session = Depends(get_db)):
-    user = _get_user(data.firebase_uid, db)
+    user = _get_or_create_user(data.firebase_uid, db)
     items = db.query(WardrobeItem).filter(WardrobeItem.user_id == user.id).all()
 
     if not items:
