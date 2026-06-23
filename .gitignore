@@ -28,5 +28,4 @@ backend/uploads/
 # ── ML / binary artifacts ────────────────────────────────────────────────────
 *.pt
 *.pth
-backend/ai/data/*.npy
-backend/ai/data/*.index
+# data files are small (<1MB) — keep them in git so deployment works

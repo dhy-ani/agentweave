@@ -8,7 +8,10 @@ app = FastAPI(title="AgentWeave – StyleGenie Backend")
 # CORS must be registered first
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://dhy-ani.github.io",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

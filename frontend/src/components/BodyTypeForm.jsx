@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const API = 'http://localhost:8001';
+const API = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
 const BodyTypeForm = ({ setBodyType, setLoading }) => {
   const [image, setImage] = useState(null);

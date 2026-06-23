@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { auth } from '../firebase';
 
-const API = 'http://localhost:8001';
+const API = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 const CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory', 'other'];
 
 export default function WardrobeManager({ occasion, weather, bodyType, gender }) {
