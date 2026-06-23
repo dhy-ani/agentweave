@@ -20,6 +20,7 @@ frontend/node_modules/
 
 # ── Frontend build ────────────────────────────────────────────────────────────
 frontend/build/
+frontend/.env
 
 # ── Uploads (user data, not for git) ─────────────────────────────────────────
 backend/uploads/

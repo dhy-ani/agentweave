@@ -1,32 +1,25 @@
-import { useState } from "react";
-import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { useState } from 'react';
 
-
-
-function PasswordInput({ password, setPassword }) {
-  const [showPassword, setShowPassword] = useState(false);
+function PasswordInput({ password, setPassword, onEnter }) {
+  const [show, setShow] = useState(false);
 
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
+    <div className="relative">
       <input
-        type={showPassword ? "text" : "password"}
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        type={show ? 'text' : 'password'}
         placeholder="Password"
-        style={{ paddingRight: "20px" }}
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && onEnter?.()}
+        className="input-field pr-14"
       />
-      <span
-        onClick={() => setShowPassword(!showPassword)}
-        style={{
-          position: "absolute",
-          right: "8px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          cursor: "pointer",
-        }}
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 text-xs transition-colors"
       >
-        {showPassword ? <FaEyeSlash /> : <FaEye />}
-      </span>
+        {show ? 'Hide' : 'Show'}
+      </button>
     </div>
   );
 }

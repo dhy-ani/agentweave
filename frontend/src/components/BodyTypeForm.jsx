@@ -1,70 +1,62 @@
 import React, { useState } from 'react';
 
+const API = 'http://localhost:8001';
+
 const BodyTypeForm = ({ setBodyType, setLoading }) => {
   const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   const handleFileChange = (e) => {
-    const selected = e.target.files[0];
-    if (selected) {
-      setImage(selected);
-    }
+    const f = e.target.files[0];
+    if (!f) return;
+    setImage(f);
+    setPreview(URL.createObjectURL(f));
   };
 
   const handleUpload = async () => {
-  console.log("🖼 Upload button clicked");
-
-  if (!image) {
-    alert("Please select an image");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("file", image);
-
-  try {
-    setLoading(true);
-    console.log("📡 Sending image to backend...");
-
-    const res = await fetch("http://localhost:8001/analyze-body", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-    console.log("✅ Server responded:", data);
-
-    if (data.body_type) {
-      setBodyType(data.body_type);
-    } else {
-      alert(data.error || "Unknown error");
+    if (!image) { alert('Please select a photo'); return; }
+    const fd = new FormData();
+    fd.append('file', image);
+    try {
+      setLoading(true);
+      const res = await fetch(`${API}/analyze-body`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.body_type) {
+        setBodyType(data.body_type);
+      } else {
+        alert(data.error || 'Could not detect body type. Try a clear full-body photo.');
+      }
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-
-  } catch (err) {
-    console.error("❌ Upload failed:", err);
-    alert("Upload failed: " + err.message);
-  } finally {
-    setLoading(false);
-  }
-    
-
-};
-
-
+  };
 
   return (
-    <div className="mb-4">
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="border p-2"
-      />
-      <button
-        onClick={handleUpload}
-        className="ml-2 bg-blue-600 text-white px-4 py-2 rounded"
+    <div className="space-y-3">
+      <label className="text-sm font-medium text-neutral-300">
+        Step 1 — Upload a full-body photo for body-type analysis
+      </label>
+      <label
+        htmlFor="body-photo"
+        className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 hover:border-brand-500 rounded-xl py-6 cursor-pointer transition-colors"
       >
-        Analyze Body Type
-      </button>
+        {preview ? (
+          <img src={preview} alt="preview" className="h-32 object-contain rounded-lg" />
+        ) : (
+          <>
+            <span className="text-2xl mb-1">🤳</span>
+            <span className="text-sm text-neutral-400">Click to upload photo</span>
+          </>
+        )}
+      </label>
+      <input id="body-photo" type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+      {image && (
+        <button onClick={handleUpload} className="btn-primary w-full">
+          Analyze Body Type
+        </button>
+      )}
     </div>
   );
 };

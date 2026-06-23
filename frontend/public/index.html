@@ -27,6 +27,10 @@
     <title>AgentWeave</title>
   </head>
   <body>
+    <script>
+      // Restore path stored by 404.html SPA redirect
+      (function(){var r=sessionStorage.redirect;delete sessionStorage.redirect;if(r&&r!==location.href)history.replaceState(null,null,r);}());
+    </script>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
     <!--
