@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/agentweave/static/css/main.df8130e1.css",
+    "main.js": "/agentweave/static/js/main.e4a5e1dc.js",
+    "index.html": "/agentweave/index.html",
+    "main.df8130e1.css.map": "/agentweave/static/css/main.df8130e1.css.map",
+    "main.e4a5e1dc.js.map": "/agentweave/static/js/main.e4a5e1dc.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.df8130e1.css",
+    "static/js/main.e4a5e1dc.js"
+  ]
+}
