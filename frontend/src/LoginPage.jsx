@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import PasswordInput from './PasswordInput';
@@ -12,6 +12,15 @@ function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Handle the redirect result when Google sends the user back
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) navigate('/dashboard');
+      })
+      .catch((e) => {
+        setError(`Google sign-in failed: ${e.message}`);
+      });
+
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) navigate('/dashboard');
     });
@@ -31,22 +40,10 @@ function LoginPage() {
     }
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = () => {
     setError('');
-    try {
-      await signInWithPopup(auth, googleProvider);
-      navigate('/dashboard');
-    } catch (e) {
-      if (e.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorised in Firebase. Add it under Authentication → Authorized domains.');
-      } else if (e.code === 'auth/popup-blocked') {
-        setError('Pop-up was blocked by your browser. Allow pop-ups for this site and try again.');
-      } else if (e.code === 'auth/popup-closed-by-user') {
-        setError('Sign-in cancelled.');
-      } else {
-        setError(`Google sign-in failed: ${e.message}`);
-      }
-    }
+    // Redirect to Google — no popup, works on all browsers and hosted domains
+    signInWithRedirect(auth, googleProvider);
   };
 
   return (
