@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword, signInWithRedirect, getRedirectResult, onAu
 import { auth, googleProvider } from './firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import PasswordInput from './PasswordInput';
+import DoodleAccents from './components/DoodleAccents';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -47,8 +48,9 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen bg-neutral-950 flex items-center justify-center px-4 overflow-hidden">
+      <DoodleAccents variant="auth" />
+      <div className="relative w-full max-w-sm">
         {/* Logo / brand */}
         <div className="text-center mb-10">
           <h1 className="font-serif text-4xl font-bold text-white tracking-tight">

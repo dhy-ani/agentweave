@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { auth } from '../firebase';
+import { HangerIcon, SparkleIcon } from './icons';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 const CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory', 'other'];
@@ -106,7 +107,7 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
             <img src={preview.url} alt="preview" className="h-40 object-contain rounded-lg" />
           ) : (
             <>
-              <span className="text-3xl mb-2">👕</span>
+              <HangerIcon className="w-8 h-8 mb-2 text-neutral-500" />
               <span className="text-sm text-neutral-400">Click to upload a clothing photo</span>
             </>
           )}
@@ -160,8 +161,8 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
       {items.length > 0 && (
         <div className="card space-y-4">
           <h2 className="font-serif text-xl font-semibold text-white">What Should I Wear?</h2>
-          <button onClick={handleSuggest} disabled={suggesting} className="btn-primary w-full">
-            {suggesting ? 'Thinking…' : '✨ Suggest Outfit from My Closet'}
+          <button onClick={handleSuggest} disabled={suggesting} className="btn-primary w-full flex items-center justify-center gap-2">
+            {suggesting ? 'Thinking…' : (<><SparkleIcon className="w-4 h-4" /> Suggest Outfit from My Closet</>)}
           </button>
 
           {suggestion && (

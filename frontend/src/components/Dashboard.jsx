@@ -6,6 +6,8 @@ import FashionCard from './FashionCard';
 import BodyTypeForm from './BodyTypeForm';
 import WardrobeManager from './WardrobeManager';
 import ShoppingPanel from './ShoppingPanel';
+import DoodleAccents from './DoodleAccents';
+import { SparkleIcon, ClosetIcon, BagIcon, SpinnerIcon, ProfileIcon } from './icons';
 
 const API = "http://localhost:8001";
 
@@ -15,9 +17,9 @@ const LOCATIONS = ["city", "beach", "mountains", "office", "cafe", "club", "park
 const GENDERS   = ["woman", "man", "non-binary"];
 
 const TABS = [
-  { id: "discover", label: "Discover",  icon: "✦" },
-  { id: "wardrobe", label: "My Closet", icon: "👗" },
-  { id: "shop",     label: "Shop",      icon: "🛍" },
+  { id: "discover", label: "Discover",  Icon: SparkleIcon },
+  { id: "wardrobe", label: "My Closet", Icon: ClosetIcon },
+  { id: "shop",     label: "Shop",      Icon: BagIcon },
 ];
 
 // ── SQL helpers ───────────────────────────────────────────────────────────────
@@ -111,6 +113,8 @@ const Dashboard = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadingRec, setLoadingRec]   = useState(false);
   const [saved, setSaved]             = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
 
@@ -146,6 +150,7 @@ const Dashboard = () => {
     }
     setLoadingRec(true);
     setSaved(false);
+    setHasInteracted(false);
     try {
       const prompt = `A ${form.gender} with a ${bodyType || "balanced"} body shape wearing a stylish outfit for a ${form.occasion} in ${form.weather} weather at the ${form.location}. They work as a ${form.occupation}.`;
       const res = await fetch(`${API}/stylegenie/trend_vector`, {
@@ -172,6 +177,7 @@ const Dashboard = () => {
   const handleSwipe = async (dir) => {
     const rec = results[currentIndex];
     if (!rec) return;
+    setHasInteracted(true);
 
     if (dir === "up") {
       // Save to SQL
@@ -197,7 +203,8 @@ const Dashboard = () => {
   if (authLoading) return <div className="min-h-screen bg-neutral-950" />;
 
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className="relative min-h-screen bg-neutral-950">
+      <DoodleAccents variant="dashboard" />
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur border-b border-neutral-800 px-4 py-3 flex items-center justify-between">
         <h1 className="font-serif text-xl font-bold text-white">
@@ -207,22 +214,36 @@ const Dashboard = () => {
           <div className="flex bg-neutral-900 rounded-full p-1 gap-1">
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                   tab === t.id
                     ? "bg-brand-600 text-white shadow"
                     : "text-neutral-400 hover:text-neutral-200"
                 }`}>
-                {t.icon} {t.label}
+                <t.Icon className="w-3.5 h-3.5" /> {t.label}
               </button>
             ))}
           </div>
-          <button onClick={logout} className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors px-2">
-            Sign out
-          </button>
+          <div className="relative">
+            <button onClick={() => setProfileMenuOpen(o => !o)} aria-label="Profile menu"
+              className="w-8 h-8 rounded-full border border-gold-400/60 text-gold-300 hover:bg-neutral-900 transition-colors flex items-center justify-center">
+              <ProfileIcon className="w-4 h-4" />
+            </button>
+            {profileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setProfileMenuOpen(false)} />
+                <div className="absolute right-0 mt-2 w-36 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden z-30">
+                  <button onClick={() => { setProfileMenuOpen(false); logout(); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors">
+                    Sign out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="relative max-w-2xl mx-auto px-4 py-8">
 
         {/* ── DISCOVER TAB ───────────────────────────────────────────────── */}
         {tab === "discover" && (
@@ -234,7 +255,7 @@ const Dashboard = () => {
                 <BodyTypeForm setBodyType={setBodyType} setLoading={setLoadingBody} />
                 {loadingBody && (
                   <div className="mt-4 flex items-center gap-2 text-sm text-neutral-400">
-                    <span className="animate-spin">⟳</span> Analysing body shape…
+                    <SpinnerIcon className="w-4 h-4" /> Analysing body shape…
                   </div>
                 )}
               </div>
@@ -321,9 +342,13 @@ const Dashboard = () => {
                   className="btn-primary w-full text-base py-3">
                   {loadingRec ? (
                     <span className="flex items-center justify-center gap-2">
-                      <span className="animate-spin">⟳</span> Finding your look…
+                      <SpinnerIcon className="w-4 h-4" /> Finding your look…
                     </span>
-                  ) : "✦ Get My Outfit"}
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <SparkleIcon className="w-4 h-4" /> Get My Outfit
+                    </span>
+                  )}
                 </button>
               </div>
             )}
@@ -335,7 +360,11 @@ const Dashboard = () => {
                   <p className="text-sm text-neutral-400">
                     Look <span className="text-white font-medium">{currentIndex + 1}</span> of {results.length}
                   </p>
-                  {saved && <span className="text-xs text-brand-400 font-medium animate-pulse">✦ Saved!</span>}
+                  {saved && (
+                    <span className="flex items-center gap-1 text-xs text-brand-400 font-medium animate-pulse">
+                      <SparkleIcon className="w-3.5 h-3.5" /> Saved!
+                    </span>
+                  )}
                 </div>
 
                 <FashionCard
@@ -353,12 +382,14 @@ const Dashboard = () => {
                   ))}
                 </div>
 
-                <p className="text-center text-xs text-neutral-600">Swipe left/right to browse · swipe up to save</p>
-
-                <button onClick={() => setTab("shop")}
-                  className="w-full py-2.5 rounded-xl border border-neutral-700 hover:border-brand-500 text-sm font-medium text-neutral-300 hover:text-white transition-all flex items-center justify-center gap-2">
-                  🛍 Shop this look
-                </button>
+                {/* Shown contextually once the user has actually engaged with a look,
+                    rather than as a permanent CTA competing with the swipe deck. */}
+                {hasInteracted && (
+                  <button onClick={() => setTab("shop")}
+                    className="w-full py-2.5 rounded-xl border border-neutral-700 hover:border-gold-400 text-sm font-medium text-neutral-300 hover:text-white transition-all flex items-center justify-center gap-2">
+                    <BagIcon className="w-4 h-4" /> Shop this look
+                  </button>
+                )}
               </div>
             )}
           </div>

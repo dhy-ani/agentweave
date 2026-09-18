@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CameraIcon } from './icons';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
@@ -46,7 +47,7 @@ const BodyTypeForm = ({ setBodyType, setLoading }) => {
           <img src={preview} alt="preview" className="h-32 object-contain rounded-lg" />
         ) : (
           <>
-            <span className="text-2xl mb-1">🤳</span>
+            <CameraIcon className="w-7 h-7 mb-1 text-neutral-500" />
             <span className="text-sm text-neutral-400">Click to upload photo</span>
           </>
         )}

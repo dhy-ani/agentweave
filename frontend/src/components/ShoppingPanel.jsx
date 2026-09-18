@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { BagIcon, SpinnerIcon, SparkleIcon } from "./icons";
 
 const API = "http://localhost:8001";
 
@@ -161,9 +162,13 @@ export default function ShoppingPanel({ styleCaption, occasion, bodyType, gender
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
-              <span className="animate-spin">⟳</span> Finding stores…
+              <SpinnerIcon className="w-4 h-4" /> Finding stores…
             </span>
-          ) : "🛍 Find This Look Online"}
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              <BagIcon className="w-4 h-4" /> Find This Look Online
+            </span>
+          )}
         </button>
       </div>
 
@@ -209,7 +214,9 @@ export default function ShoppingPanel({ styleCaption, occasion, bodyType, gender
                 These are outside your <span className="text-white">${results.price_range.min}–${results.price_range.max}</span> range — shown in case you love the style enough to stretch.
               </p>
               {results.outside_budget.length === 0 ? (
-                <div className="card text-center text-neutral-400 text-sm py-8">No stretch picks — all brands fit your budget! 🎉</div>
+                <div className="card text-center text-neutral-400 text-sm py-8 flex items-center justify-center gap-2">
+                  <SparkleIcon className="w-4 h-4 text-gold-400" /> No stretch picks — all brands fit your budget!
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {results.outside_budget.map(s => <BrandCard key={s.brand} s={s} isOutside={true} firebaseUid={firebaseUid} occasion={occasion} />)}
