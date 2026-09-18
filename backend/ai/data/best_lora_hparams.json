@@ -1,0 +1,14 @@
+{
+  "best_params": {
+    "lora_rank": 8,
+    "lora_alpha": 32,
+    "lora_dropout": 0.02221339552022711,
+    "lr": 4.064644058668377e-05,
+    "weight_decay": 0.00022264204303769702,
+    "temperature": 0.17672758239885092,
+    "batch_size": 8,
+    "text_loss_weight": 0.1572025152574213
+  },
+  "best_val_loss": 1.7201940854390463,
+  "n_trials": 8
+}

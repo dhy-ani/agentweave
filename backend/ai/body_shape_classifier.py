@@ -1,12 +1,25 @@
+import os
 import numpy as np
 from PIL import Image
-from ultralytics import YOLO
 
-model = YOLO("yolov8n-pose.pt")
+# Lazy-loaded: ultralytics + its dependencies (opencv, etc.) cost real idle
+# memory, and this model is only needed by the /analyze-body endpoint --
+# loading it eagerly at import time (as before) meant every server start
+# paid that cost even for requests that never touch body-shape analysis.
+_model = None
+
+
+def _get_model():
+    global _model
+    if _model is None:
+        from ultralytics import YOLO
+        weights_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "yolov8n-pose.pt")
+        _model = YOLO(weights_path)
+    return _model
 
 
 def run_pose_estimation(image: Image.Image):
-    results = model(image)
+    results = _get_model()(image)
 
     if not results or not results[0].keypoints:
         raise ValueError("No keypoints detected.")

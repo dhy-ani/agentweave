@@ -10,3 +10,14 @@ tqdm==4.67.1
 pydantic==2.10.6
 open-clip-torch==2.29.0
 ultralytics==8.3.107
+# torch/torchvision deliberately NOT pinned here -- render.yaml's buildCommand
+# installs them explicitly from the CPU-only wheel index BEFORE this file, and
+# a bare `torch==2.12.1` here (no +cpu local version) risks pip treating that
+# as unsatisfied and reinstalling the full CUDA build (~2-3GB) from the
+# default PyPI index. Local dev installs whichever +cpu build is already
+# present; deploys must keep using the CPU index for these two packages.
+transformers==5.17.0
+peft==0.21.0
+optuna==5.0.0
+imagehash==4.3.2
+matplotlib==3.11.0

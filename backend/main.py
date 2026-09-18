@@ -38,9 +38,16 @@ app.include_router(wardrobe_router)
 app.include_router(shopping_router)
 
 # Static file mounts
+# Serves the curated, quality-filtered, EXIF-stripped, resized dataset
+# (datasets/curate_dataset.py) rather than the raw Pinterest scrapes.
 static_image_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "datasets", "rawImages")
+    os.path.join(os.path.dirname(__file__), "..", "datasets", "processedImages")
 )
+if not os.path.isdir(static_image_dir):
+    # fallback so the app still runs if curation hasn't been run yet
+    static_image_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "datasets", "rawImages")
+    )
 if os.path.isdir(static_image_dir):
     app.mount("/images", StaticFiles(directory=static_image_dir), name="images")
 
