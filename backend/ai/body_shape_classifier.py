@@ -1,35 +1,60 @@
+"""
+Body-shape classification from YOLOv8n-pose keypoints.
+
+Pose estimation runs on the ONNX export (ai/onnx_inference.PoseOnnx) by
+default; AGENTWEAVE_BACKEND=torch switches to ultralytics for comparison.
+Both are loaded lazily on the first /analyze-body request.
+"""
+from __future__ import annotations
+
 import os
+from functools import lru_cache
+
 import numpy as np
 from PIL import Image
 
-# Lazy-loaded: ultralytics + its dependencies (opencv, etc.) cost real idle
-# memory, and this model is only needed by the /analyze-body endpoint --
-# loading it eagerly at import time (as before) meant every server start
-# paid that cost even for requests that never touch body-shape analysis.
-_model = None
+from . import model_cache
+
+_pose = None
 
 
-def _get_model():
-    global _model
-    if _model is None:
-        from ultralytics import YOLO
-        weights_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "yolov8n-pose.pt")
-        _model = YOLO(weights_path)
-    return _model
+@lru_cache(maxsize=1)
+def _ultralytics_model():
+    from ultralytics import YOLO
+
+    return YOLO(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "yolov8n-pose.pt"))
 
 
-def run_pose_estimation(image: Image.Image):
-    results = _get_model()(image)
+def _ultralytics_keypoints(image: Image.Image) -> list[list[float]] | None:
+    results = _ultralytics_model()(image, verbose=False)
+    if not results or results[0].keypoints is None or len(results[0].keypoints) == 0:
+        return None
+    return results[0].keypoints.xyn[0].cpu().numpy().tolist()
 
-    if not results or not results[0].keypoints:
+
+def _get_pose():
+    global _pose
+    if _pose is None:
+        from .onnx_inference import PoseOnnx
+
+        _pose = PoseOnnx()
+    return _pose
+
+
+def pose_model_loaded() -> bool:
+    return _pose is not None and _pose.loaded
+
+
+def run_pose_estimation(image: Image.Image) -> list[list[float]]:
+    if model_cache.backend_name() == "torch":
+        keypoints = _ultralytics_keypoints(image)
+    else:
+        keypoints = _get_pose().keypoints(image)
+
+    if not keypoints:
         raise ValueError("No keypoints detected.")
-
-    keypoints_tensor = results[0].keypoints.xyn[0]
-    keypoints = keypoints_tensor.cpu().numpy().tolist()
-
     if len(keypoints) < 13:
         raise ValueError("Incomplete keypoints. Make sure the image shows a full body.")
-
     return keypoints
 
 

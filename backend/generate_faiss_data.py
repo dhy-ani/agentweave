@@ -1,5 +1,11 @@
 """
-Build the live FAISS retrieval index + metadata used by backend/routers/stylegenie.py.
+Build the retrieval corpus metadata (captions, image paths, labels) and the
+embeddings used by backend/routers/stylegenie.py.
+
+Serving no longer reads trends.index: it searches ai/data/corpus_embeddings.npy
+with numpy (ai/retrieval.py), which this script refreshes at the end via
+ai/build_corpus_embeddings.py. trends.index / image_vectors.npy are still
+written for the legacy FAISS scripts (ai/search_similar.py etc.).
 
 Fixes vs. the original script (Part A1 of the ML overhaul plan):
   - The original called `merge_clip_with_captions(path)` with a single image
@@ -128,7 +134,7 @@ def main():
         idx += 1
 
     if not vectors:
-        raise SystemExit("No vectors were produced — aborting without overwriting existing index.")
+        raise SystemExit("No vectors were produced; aborting without overwriting existing index.")
 
     vectors_arr = np.array(vectors).astype("float32")
     np.save(VECTOR_FILE, vectors_arr)
@@ -148,6 +154,9 @@ def main():
 
     print(f"[generate_faiss_data] indexed {len(vectors)}/{len(rows)} images "
           f"(dim={dim}) -> {INDEX_FILE}")
+
+    from ai import build_corpus_embeddings
+    build_corpus_embeddings.main()
 
 
 if __name__ == "__main__":

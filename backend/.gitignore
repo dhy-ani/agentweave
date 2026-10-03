@@ -1,0 +1,7 @@
+# Build output of scripts/vercel_build.py
+static/images/
+
+.coverage
+.pytest_cache/
+mutants/
+static/

@@ -4,7 +4,7 @@ from PIL import Image, UnidentifiedImageError
 import numpy as np
 import os
 import json
-import clip  # ✅ Keeping OpenAI's clip for text vectors
+import clip  # Keeping OpenAI's clip for text vectors
 
 # Setup device
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,14 +69,14 @@ def extract_all_clip_vectors(image_dir: str, output_path: str):
             try:
                 vector = get_clip_vector(load_image(image_path), model, preprocess)
                 vectors_dict[image_name] = vector.tolist()
-                print(f"✅ Processed: {image_name}")
+                print(f"Processed: {image_name}")
             except Exception as e:
-                print(f"❌ Skipped {image_name}: {e}")
+                print(f"ERROR: Skipped {image_name}: {e}")
 
     with open(output_path, "w") as f:
         json.dump(vectors_dict, f, indent=2)
 
-    print(f"\n✅ Saved all vectors to: {output_path}")
+    print(f"\nSaved all vectors to: {output_path}")
 
 # -----------------------------
 # Run

@@ -15,9 +15,9 @@ def search_similar_images(query_path, k=5):
     index.nprobe = 8
     distances, indices = index.search(vector, k)
 
-    print(f"\n🔍 Top {k} similar images to {query_path}:")
+    print(f"\nTop {k} similar images to {query_path}:")
     for i, dist in zip(indices[0], distances[0]):
-        print(f"📸 {filenames[i]} (distance: {dist:.3f})")
+        print(f"{filenames[i]} (distance: {dist:.3f})")
 
 
 if __name__ == "__main__":

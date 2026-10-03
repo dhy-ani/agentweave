@@ -29,20 +29,20 @@ def generate_caption(image, model, processor, device="cpu", max_new_tokens=20):
 
 def merge_clip_with_captions(image_dir, clip_vector_path, output_path, device="cpu"):
     """Merge image captions from BLIP with existing CLIP vectors."""
-    print("🔄 Loading BLIP model...")
+    print("Loading BLIP model...")
     blip_model, blip_processor = load_blip_model(device)
 
-    print("📂 Loading CLIP vector file...")
+    print("Loading CLIP vector file...")
     with open(clip_vector_path, "r") as f:
         clip_data = json.load(f)
 
     combined_data = {}
 
-    print("🖼️ Processing images and generating captions...")
+    print("Processing images and generating captions...")
     for img_name, vector in tqdm(clip_data.items(), total=len(clip_data)):
         image_path = os.path.join(image_dir, img_name)
         if not os.path.isfile(image_path):
-            print(f"⚠️ Skipped missing file: {img_name}")
+            print(f"WARNING: Skipped missing file: {img_name}")
             continue
 
         try:
@@ -57,13 +57,13 @@ def merge_clip_with_captions(image_dir, clip_vector_path, output_path, device="c
             }
 
         except Exception as e:
-            print(f"❌ Error with {img_name}: {str(e)}")
+            print(f"ERROR: failed on {img_name}: {str(e)}")
 
-    print(f"💾 Saving combined data to {output_path}")
+    print(f"Saving combined data to {output_path}")
     with open(output_path, "w") as f:
         json.dump(combined_data, f, indent=2)
 
-    print(f"✅ Done! {len(combined_data)} entries saved.")
+    print(f"Done! {len(combined_data)} entries saved.")
 
 # Run the script
 if __name__ == "__main__":

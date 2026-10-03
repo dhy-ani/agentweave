@@ -41,6 +41,7 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from embedding_cache import get_all_embeddings, zero_shot_embedder
 from data_split import get_splits, load_manifest
+os.environ.setdefault("AGENTWEAVE_BACKEND", "torch")
 import model_cache
 from train_classifier import evaluate_classifier
 

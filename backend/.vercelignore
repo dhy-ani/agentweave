@@ -1,0 +1,37 @@
+# Vercel project Root Directory is backend/, so this file lives here.
+# Never upload local secrets, databases or user uploads.
+.env
+*.db
+*.sqlite
+uploads/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+
+# Training-only artifacts (the function only needs ai/data/*.json + corpus_embeddings.npy).
+*.pt
+*.pth
+ai/data/embedding_cache_*.npz
+ai/data/image_vectors.npy
+ai/data/trends.index
+ai/data/aesthetic_classifier.joblib
+ai/data/lora_adapter/
+ai/data/eval/
+
+# Model binaries are fetched from the GitHub release at build time
+# (scripts/vercel_build.py), never uploaded from a local checkout.
+ai/models/*.onnx
+ai/models/fp32/
+static/images/
+
+# Torch / HF caches
+.cache/
+huggingface/
+torch_cache/
+
+tests/
+.coverage
+mutants/

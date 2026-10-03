@@ -1,46 +1,39 @@
 """
-Wardrobe router — upload clothing items and get outfit suggestions.
-Items are now stored in the SQL database (WardrobeItem table).
-"""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Depends
-from pydantic import BaseModel
-from typing import Optional
-import os, sys, json, uuid
-from datetime import datetime
-from PIL import Image
-import io
-import numpy as np
-import faiss
-from sqlalchemy.orm import Session
+Wardrobe router: upload clothing items and get outfit suggestions.
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+Item metadata and CLIP embeddings live in the database (WardrobeItem); image
+bytes go through storage.get_storage(), so no request depends on the local
+disk of the instance that handled the upload.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from typing import Optional
+
+import numpy as np
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
 from ai.model_cache import embed_image, embed_text_ensemble
+from ai.retrieval import get_corpus
 from db.database import get_db
-from db.models import User, WardrobeItem
+from db.models import User, WardrobeItem, placeholder_email
+from image_io import read_image, to_jpeg
+from storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wardrobe", tags=["Wardrobe"])
-
-_base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-WARDROBE_UPLOAD_DIR = os.path.join(_base, "uploads", "wardrobe")
-os.makedirs(WARDROBE_UPLOAD_DIR, exist_ok=True)
-
-# FAISS + Pinterest trend metadata
-try:
-    faiss_index = faiss.read_index(os.path.join(_base, "ai/data/trends.index"))
-    with open(os.path.join(_base, "ai/data/index_to_caption.json")) as f:
-        index_to_caption = json.load(f)
-    with open(os.path.join(_base, "ai/data/index_to_image_path.json")) as f:
-        index_to_image_path = json.load(f)
-except Exception as e:
-    raise RuntimeError(f"Wardrobe router: failed to load FAISS: {e}")
-
-
-# ── Helper ────────────────────────────────────────────────────────────────────
 
 def _get_or_create_user(firebase_uid: str, db: Session) -> User:
     user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
     if not user:
-        user = User(firebase_uid=firebase_uid)
+        # users.email is NOT NULL + unique; /users/upsert replaces this placeholder.
+        user = User(firebase_uid=firebase_uid, email=placeholder_email(firebase_uid))
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -52,6 +45,7 @@ def _item_out(item: WardrobeItem) -> dict:
         "id": item.id,
         "item_uuid": item.item_uuid,
         "filename": item.filename,
+        "image_url": item.image_url,
         "category": item.category,
         "color": item.color,
         "description": item.description,
@@ -59,7 +53,16 @@ def _item_out(item: WardrobeItem) -> dict:
     }
 
 
-# ── Upload ────────────────────────────────────────────────────────────────────
+def _item_vector(item: WardrobeItem) -> np.ndarray | None:
+    if item.clip_embedding:
+        vec = np.frombuffer(item.clip_embedding, dtype=np.float32)
+    elif item.clip_vector:  # rows written before embeddings moved to LargeBinary
+        vec = np.asarray(json.loads(item.clip_vector), dtype=np.float32)
+    else:
+        return None
+    norm = np.linalg.norm(vec)
+    return vec / norm if norm > 0 else None
+
 
 @router.post("/upload")
 async def upload_clothing_item(
@@ -70,35 +73,35 @@ async def upload_clothing_item(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = _get_or_create_user(firebase_uid, db)
-
-    img_bytes = await file.read()
-    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-
-    ext = os.path.splitext(file.filename)[-1] or ".jpg"
+    image = await read_image(file)
     item_id = str(uuid.uuid4())
-    saved_path = os.path.join(WARDROBE_UPLOAD_DIR, f"{item_id}{ext}")
-    img.save(saved_path)
+    filename = f"{item_id}.jpg"
 
-    vec = embed_image(img).tolist()
+    vec = await run_in_threadpool(embed_image, image)
+    jpeg = await run_in_threadpool(to_jpeg, image)
+    storage = get_storage()
+    try:
+        image_url = await run_in_threadpool(storage.save, filename, jpeg, "image/jpeg")
+    except Exception as exc:
+        logger.exception("Storing wardrobe image failed")
+        raise HTTPException(status_code=502, detail="Could not store the uploaded image.") from exc
 
+    user = _get_or_create_user(firebase_uid, db)
     db_item = WardrobeItem(
         user_id=user.id,
         item_uuid=item_id,
-        filename=f"{item_id}{ext}",
+        filename=filename,
+        image_url=image_url,
         category=category.lower().strip(),
         color=color.strip() or None,
         description=description.strip() or None,
-        clip_vector=json.dumps(vec),
+        clip_embedding=vec.astype(np.float32).tobytes(),
     )
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
+    return {"success": True, "item_id": item_id, "category": category, "image_url": image_url}
 
-    return {"success": True, "item_id": item_id, "category": category}
-
-
-# ── List items ────────────────────────────────────────────────────────────────
 
 @router.get("/items")
 def list_wardrobe_items(firebase_uid: str, db: Session = Depends(get_db)):
@@ -110,8 +113,6 @@ def list_wardrobe_items(firebase_uid: str, db: Session = Depends(get_db)):
     return {"items": [_item_out(i) for i in items]}
 
 
-# ── Delete ────────────────────────────────────────────────────────────────────
-
 @router.delete("/items/{item_uuid}")
 def delete_wardrobe_item(item_uuid: str, firebase_uid: str, db: Session = Depends(get_db)):
     user = _get_or_create_user(firebase_uid, db)
@@ -122,17 +123,16 @@ def delete_wardrobe_item(item_uuid: str, firebase_uid: str, db: Session = Depend
     if not item:
         raise HTTPException(status_code=404, detail="Item not found.")
 
-    # Remove image file
-    fpath = os.path.join(WARDROBE_UPLOAD_DIR, item.filename)
-    if os.path.exists(fpath):
-        os.remove(fpath)
+    try:
+        get_storage().delete(item.filename, item.image_url)
+    except Exception:
+        # The DB row is the source of truth; an orphaned object is harmless.
+        logger.exception("Deleting stored image for %s failed", item_uuid)
 
     db.delete(item)
     db.commit()
     return {"success": True}
 
-
-# ── Outfit suggestion ─────────────────────────────────────────────────────────
 
 class SuggestRequest(BaseModel):
     firebase_uid: str
@@ -146,7 +146,6 @@ class SuggestRequest(BaseModel):
 def suggest_outfit_from_wardrobe(data: SuggestRequest, db: Session = Depends(get_db)):
     user = _get_or_create_user(data.firebase_uid, db)
     items = db.query(WardrobeItem).filter(WardrobeItem.user_id == user.id).all()
-
     if not items:
         raise HTTPException(status_code=400, detail="Wardrobe is empty.")
 
@@ -156,48 +155,33 @@ def suggest_outfit_from_wardrobe(data: SuggestRequest, db: Session = Depends(get
     ]
     if data.body_type:
         prompts.append(f"Flattering {data.body_type} body shape outfit for {data.occasion}.")
+    query = embed_text_ensemble(prompts)
 
-    query_vec = embed_text_ensemble(prompts).astype("float32")
-
-    # Score each wardrobe item
-    scored = []
+    # Best-scoring item per category.
+    best: dict[str, tuple[dict, float]] = {}
     for item in items:
-        if not item.clip_vector:
+        vec = _item_vector(item)
+        if vec is None:
             continue
-        vec = np.array(json.loads(item.clip_vector), dtype="float32")
-        norm = np.linalg.norm(vec)
-        if norm > 0:
-            vec /= norm
-        sim = float(np.dot(query_vec, vec))
-        scored.append((_item_out(item), sim))
+        sim = float(np.dot(query, vec))
+        if item.category not in best or sim > best[item.category][1]:
+            best[item.category] = (_item_out(item), sim)
+    outfit = [item for item, _ in sorted(best.values(), key=lambda x: -x[1])]
 
-    # Pick best per category
-    categories: dict[str, tuple] = {}
-    for item_dict, sim in scored:
-        cat = item_dict["category"]
-        if cat not in categories or sim > categories[cat][1]:
-            categories[cat] = (item_dict, sim)
-
-    outfit = [item for item, _ in sorted(categories.values(), key=lambda x: -x[1])]
-
-    # Pinterest trend inspiration
-    k = min(5, faiss_index.ntotal)
-    D, I = faiss_index.search(query_vec.reshape(1, -1), k=k)
-    trend_idx = str(int(I[0][0]))
-    trend_img = os.path.basename(index_to_image_path.get(trend_idx, ""))
-    trend_caption = index_to_caption.get(trend_idx, "")
+    corpus = get_corpus()
+    top, _ = corpus.search(query, 1)
+    trend_idx = int(top[0])
 
     pieces = [
-        f"{i.get('color', '') + ' ' if i.get('color') else ''}{i.get('description') or i.get('category')}"
+        f"{i['color'] + ' ' if i.get('color') else ''}{i.get('description') or i.get('category')}"
         for i in outfit
     ]
     suggestion = (
         f"For {data.occasion} in {data.weather} weather, try: {', '.join(pieces)}."
         if pieces else "No matching items found."
     )
-
     return {
         "outfit": outfit,
         "suggestion": suggestion,
-        "trend_inspiration": {"image": trend_img, "caption": trend_caption},
+        "trend_inspiration": {"image": corpus.filename(trend_idx), "caption": corpus.caption(trend_idx, "")},
     }

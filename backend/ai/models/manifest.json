@@ -1,0 +1,19 @@
+{
+  "release": "models-v1",
+  "files": {
+    "clip_vision_int8.onnx": {
+      "size": 98362080,
+      "sha256": "4d907e1ca6461854c4dcb5849249d8541105fdcf568201e15e57f830902df0d3"
+    },
+    "clip_text_int8.onnx": {
+      "size": 55673243,
+      "sha256": "cee5f3e7ded07e7724ec0a49dba70cdaf46c9cf10957fd73f578a82c18d07a8c"
+    },
+    "yolov8n_pose.onnx": {
+      "size": 13484667,
+      "sha256": "f6c342aac5f1a04877763e1ddda4811e468f7e2456c6679812d1f2d36d07807f"
+    }
+  },
+  "checkpoint": "laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+  "lora_merged": true
+}

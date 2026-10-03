@@ -4,7 +4,6 @@
   "homepage": "https://dhy-ani.github.io/agentweave",
   "private": true,
   "dependencies": {
-    "@react-spring/web": "^10.0.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
@@ -19,11 +18,14 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "emulators": "npx --yes firebase-tools@14 emulators:start --only auth --project demo-agentweave",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "test:ci": "react-scripts test --watchAll=false --coverage",
+    "test:mutation": "stryker run"
   },
   "eslintConfig": {
     "extends": [
@@ -44,9 +46,20 @@
     ]
   },
   "devDependencies": {
+    "@stryker-mutator/api": "^10.0.0",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/jest-runner": "^10.0.0",
     "autoprefixer": "^10.5.0",
     "gh-pages": "^6.3.0",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
+      "^react-router$": "<rootDir>/node_modules/react-router/dist/development/index.js",
+      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js"
+    }
   }
 }
