@@ -5,3 +5,7 @@ static/images/
 .pytest_cache/
 mutants/
 static/
+
+# local virtual environments
+.venv/
+.venv-train/

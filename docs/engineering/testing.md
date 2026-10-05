@@ -18,7 +18,7 @@
 | Suite | Count | Result |
 |---|---|---|
 | Frontend (Jest + RTL) | 99 tests | All pass |
-| Backend (pytest) | 345 tests: unit, API and 3 real-model smoke tests | All pass on Windows; smoke tests skip in CI |
+| Backend (pytest) | 347 tests: 344 unit and API tests with fake models, plus 3 real-model smoke tests | All pass on Windows and on a clean Ubuntu clone; the smoke tests skip in CI |
 | Backend branch coverage (serving code) | | 100% for most modules; 94–99% for `main`, `shopping`, `onnx_inference`, `model_cache`, `body_shape_classifier` |
 
 ### Mutation scores

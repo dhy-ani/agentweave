@@ -148,7 +148,7 @@ Consequences: Smaller deploy and faster cold start; export step must be re-run a
 
 **Why.** Fast lower-level tests give quick feedback; mutation score shows whether those tests actually check behaviour.
 
-**How AgentWeave applies this.** 99 frontend tests (Jest + React Testing Library) and 345 backend tests (pytest, with fake models at the model facade), plus Playwright runs in real Chrome and an ONNX-vs-PyTorch parity script. Mutation scores: StrykerJS 63.3% to 87.8%, mutmut 85.6% to 94.2%. Testing found four real bugs, including a swipe deck that never registered swipes in real browsers ([testing guide](../engineering/testing.md)).
+**How AgentWeave applies this.** 99 frontend tests (Jest + React Testing Library) and 347 backend tests (pytest, with fake models at the model facade), plus Playwright runs in real Chrome and an ONNX-vs-PyTorch parity script. Mutation scores: StrykerJS 63.3% to 87.8%, mutmut 85.6% to 94.2%. Testing found four real bugs, including a swipe deck that never registered swipes in real browsers ([testing guide](../engineering/testing.md)).
 
 ## 10. CI/CD
 

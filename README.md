@@ -4,7 +4,7 @@ AgentWeave is a fashion recommendation web app. Upload a full-body photo, descri
 
 - **Frontend:** React 19 (Create React App), Tailwind CSS, Firebase Auth, deployed to GitHub Pages
 - **Backend:** FastAPI, SQLAlchemy, ONNX Runtime, deployable on Vercel Functions (Render config kept as an alternative)
-- **ML:** LoRA-fine-tuned CLIP ViT-B/32 for retrieval, YOLOv8n-pose for body-shape estimation, both served as int8 ONNX models without PyTorch
+- **ML:** LoRA-fine-tuned CLIP ViT-B/32 for retrieval (weight-only int8) and YOLOv8n-pose for body-shape estimation, both served as ONNX models without PyTorch
 
 This README walks through how the app was rebuilt, stage by stage, the way a professional team would build it. Each stage links to the detailed document behind it, and the whole set is indexed in [docs/](docs/README.md): research, PRD, design decisions, [ADRs](docs/adr/README.md), the [model card](docs/ml/model-card.md) and [dataset card](docs/ml/dataset-card.md), and the [testing](docs/engineering/testing.md) and [deployment](docs/engineering/deployment.md) guides.
 
@@ -96,7 +96,7 @@ PyTorch, transformers and ultralytics are too large for a fast serverless functi
   | FashionCard | 67.7% (most survivors are animation wiring) |
 
   A custom Stryker ignorer (`frontend/stryker/presentation-ignorer.mjs`) skips Tailwind `className` and `style` mutants, which only affect appearance. Inline disable comments, each with a reason, cover the animation-physics lines that are intentionally untested. The remaining swipe-threshold survivors are equivalent mutants, such as `>` versus `>=` at a point where the two values can never be equal.
-- **Backend tests.** 345 pytest tests: unit tests, API tests for every endpoint, and real-model smoke tests. They run against deterministic fake models plugged in at the model facade, with a fresh in-memory database for each test. Branch coverage of the serving code is 94–100% per module.
+- **Backend tests.** 347 pytest tests: unit tests, API tests for every endpoint, and real-model smoke tests. They run against deterministic fake models plugged in at the model facade, with a fresh in-memory database for each test. Branch coverage of the serving code is 94–100% per module.
 - **Backend mutation testing.** mutmut, run in WSL because it doesn't support Windows, went from 85.6% to **94.2%** (1117 of 1186 mutants killed). All 69 survivors were reviewed and are equivalent or behaviour-neutral; the [testing guide](docs/engineering/testing.md) lists them by category.
 - **Local runs without credentials.** The Firebase Auth Emulator with a `demo-` project lets anyone run the whole app without a Firebase account.
 
@@ -119,52 +119,170 @@ flowchart LR
   API -- brand search links --> R[Retailer sites]
 ```
 
-## Run it locally
+## Build it yourself, step by step
 
-Requirements: Node 20+, Python 3.12.
+Steps 1 to 3, plus the install, test and build commands in steps 4 and 5, were run in order on fresh clones: the backend on Ubuntu 22.04 (WSL) and the frontend on Windows 11. The in-app flow in step 4 and the retraining in step 6 were run on the development machine. Commands are shown for macOS and Linux; the Windows equivalents follow each block.
+
+### 0. Prerequisites
+
+| Tool | Version used | Notes |
+|---|---|---|
+| Git | any recent | |
+| Python | **3.12** | From python.org, `pyenv`, or `uv python install 3.12`. 3.11 or older will not work (numpy 2.4). |
+| Node.js | 20 or newer (built with 24.13; CI uses 22) | Includes npm |
+| Disk space | about 4 GB | Mostly the one-off PyTorch environment used to build the models |
+
+No Firebase account, cloud account or GPU is needed to build and run the app locally.
+
+### 1. Clone
 
 ```bash
-# backend
-cd backend
-pip install -r requirements.txt
-python -m uvicorn main:app --port 8001
+git clone https://github.com/dhy-ani/agentweave.git
+cd agentweave
 ```
 
+### 2. Build the model files
+
+The serving models (ONNX, about 170 MB) are not committed. You rebuild them from the committed LoRA adapter (`backend/ai/data/lora_adapter/`) and the base CLIP checkpoint, which is downloaded from Hugging Face (about 600 MB, once). This needs a separate PyTorch environment that the running app never uses.
+
 ```bash
-# frontend, no Firebase account needed
-cd frontend
-npm install
+cd backend
+python3.12 -m venv .venv-train
+source .venv-train/bin/activate
+pip install --upgrade pip
+# CPU-only PyTorch first; without --index-url pip pulls the 2-3 GB CUDA build
+pip install torch==2.12.1 torchvision==0.27.1 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-train.txt
+
+python ai/export_onnx.py
+python ai/build_corpus_embeddings.py
+deactivate
+```
+
+`export_onnx.py` merges the LoRA adapter into CLIP, exports the vision tower, the text tower and YOLOv8n-pose to ONNX, quantizes them, and rewrites `ai/models/manifest.json` with the new file hashes. In the clean-room build, both CLIP files came out byte-identical to the committed manifest (same SHA-256). The YOLO file had the same size but a different hash, because the ultralytics export embeds metadata. Don't commit the rewritten manifest unless you are publishing a new model release (`git checkout ai/models/manifest.json` restores it). `build_corpus_embeddings.py` re-embeds the 205 curated images with the exported model, so queries and the collection always come from the same model. On Windows, use `py -3.12 -m venv .venv-train` and `.venv-train\Scripts\activate`.
+
+Optional: `python ai/onnx_parity.py` (still inside `.venv-train`) checks the exported models against PyTorch and rewrites `ai/data/eval/onnx_parity.md`.
+
+### 3. Run the backend
+
+```bash
+# still in backend/
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+
+python -m pytest              # 347 tests: 344 with fake models + 3 smoke tests on the real ONNX files
+python -m pytest -m models    # just the 3 real-model smoke tests
+
+uvicorn main:app --port 8001
+```
+
+Check it from another terminal:
+
+```bash
+curl http://localhost:8001/health
+```
+
+You should see `"model_backend":"onnx"` and `"torch_imported":false`. Interactive API docs are at http://localhost:8001/docs. With no configuration the backend uses SQLite (`backend/agentweave.db`) and stores uploads in `backend/uploads/`; every setting is listed in `backend/.env.example`.
+
+### 4. Run the frontend
+
+Two terminals, both in `frontend/`.
+
+**Terminal 1** installs dependencies and starts a local Firebase Auth emulator, so no Firebase project is needed:
+
+```bash
+npm ci
+cp .env.example .env.local
 npm run emulators
 ```
 
-In a second terminal, copy `frontend/.env.example` to `frontend/.env.local`, set `REACT_APP_USE_AUTH_EMULATOR=true`, then run `npm start`.
+On Windows, use `copy .env.example .env.local` instead of `cp`. Once copied, edit `.env.local` and set `REACT_APP_USE_AUTH_EMULATOR=true`.
 
-The serving code expects the ONNX models in `backend/ai/models/`. Either download them from the `models-v1` release or rebuild them from the training environment (`pip install -r requirements-train.txt`, then `python ai/export_onnx.py`).
+**Terminal 2** starts the app:
 
-## Tests
+```bash
+npm start
+```
+
+Open http://localhost:3000, choose **Create one**, and sign up with any email and password, for example the emulator-only test account in `frontend/.env.example`. Then go through the flow: upload a full-body photo, pick your preferences, and swipe. Pass, like and save work by tap or drag. After that, check Saved, Shop and Closet.
+
+To use a real Firebase project instead, fill in the `REACT_APP_FIREBASE_*` values in `.env.local` and leave `REACT_APP_USE_AUTH_EMULATOR=false`.
+
+### 5. Run the test suites
 
 ```bash
 cd frontend
-npm run test:ci
-npm run test:mutation
+npm run test:ci          # 99 Jest + React Testing Library tests with coverage
+npm run test:mutation    # StrykerJS; HTML report in reports/mutation/
 ```
 
 ```bash
 cd backend
-pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest --cov
+source .venv/bin/activate
+python -m pytest --cov --cov-report=term
+mutmut run --max-children 8   # Linux, macOS or WSL only
+mutmut results
 ```
 
-Backend mutation testing (`mutmut run`) needs Linux or WSL; see the [testing guide](docs/engineering/testing.md).
+Regenerate the README screenshots with `node scripts/capture-screenshots.mjs` from `frontend/`. It needs the backend, the emulator and the frontend running, and Chrome installed; pass the app URL and the Chrome path as arguments if they differ from the defaults in the script.
 
-`npm run test:ci` runs the unit and integration tests with coverage. `npm run test:mutation` runs StrykerJS and writes an HTML report to `reports/mutation/`.
+### 6. (Optional) Retrain the model from the raw images
 
-## Deploy the backend on Vercel
-1. Publish the model release once with `backend/scripts/publish_models.sh`, which creates the `models-v1` GitHub release.
-2. Create a Vercel project from this repo and set **Root Directory** to `backend`. `vercel.json` is already configured.
-3. Add a Postgres database (for example Neon from the Vercel Marketplace) so `DATABASE_URL` is set, and a public Vercel Blob store so `BLOB_READ_WRITE_TOKEN` is set.
-4. Set `CORS_ORIGINS=https://dhy-ani.github.io`.
-5. Point the frontend's `REACT_APP_API_URL` GitHub secret at the Vercel URL.
+This reproduces the whole ML pipeline. It runs on CPU in about 20 minutes. Run everything from `backend/` inside `.venv-train`.
+
+1. **Curate the dataset.** Run phase 1 to dedupe, filter, normalise and flag likely mislabels into `datasets/flagged_for_review.csv`:
+
+   ```bash
+   python ../datasets/curate_dataset.py --phase1
+   ```
+
+   Review the flagged rows, record corrections in `datasets/label_overrides.csv`, then write the final manifest:
+
+   ```bash
+   python ../datasets/curate_dataset.py --finalize
+   ```
+
+2. **Split the data** into train and validation sets (`ai/data/split.json`):
+
+   ```bash
+   python ai/data_split.py
+   ```
+
+3. **Tune and train the LoRA adapter.** The Optuna sweep writes `ai/data/best_lora_hparams.json`, and the final training run writes `ai/data/lora_adapter/`:
+
+   ```bash
+   python ai/finetune_clip_lora.py --optuna 8
+   python ai/finetune_clip_lora.py --train
+   ```
+
+4. **Evaluate:**
+
+   ```bash
+   python ai/train_classifier.py     # macro-F1 of a linear probe
+   python ai/tune_clustering.py      # KMeans / agglomerative / DBSCAN comparison
+   python ai/cluster_images.py       # writes clusters for the cluster-share signal
+   python ai/tune_mmr_lambda.py      # MMR diversity weight
+   python ai/evaluate_retrieval.py   # writes ai/data/eval/ablation_report.md
+   ```
+
+5. **Rebuild the serving files.** Repeat step 2 above (`export_onnx.py` and `build_corpus_embeddings.py`), then recalibrate the match score:
+
+   ```bash
+   python ai/calibrate_scores.py
+   ```
+
+Expect small run-to-run differences in the metrics: Optuna sampling and training are seeded, but CPU kernels are not fully deterministic.
+
+### 7. Deploy
+
+The full guide, including the release checklist, is in [docs/engineering/deployment.md](docs/engineering/deployment.md). In short:
+
+1. **Publish the model files.** Run `bash backend/scripts/publish_models.sh` to upload the ONNX files as the `models-v1` GitHub release. The Vercel build downloads them from there and checks their hashes.
+2. **Create the Vercel project.** Import the repo and set **Root Directory** to `backend`; `vercel.json` is already configured.
+3. **Add storage.** A Postgres database (for example Neon) provides `DATABASE_URL`, and a public Vercel Blob store provides `BLOB_READ_WRITE_TOKEN`.
+4. **Set CORS.** Set `CORS_ORIGINS=https://<your-user>.github.io`.
+5. **Frontend.** Set the `REACT_APP_API_URL` and `REACT_APP_FIREBASE_*` repository secrets. Pushing to `main` then publishes the frontend to GitHub Pages through `.github/workflows/deploy.yml`.
 
 ## Known limitations
 - Backend routes trust the `firebase_uid` sent by the client; Firebase ID tokens are not yet verified server-side.
