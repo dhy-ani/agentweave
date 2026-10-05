@@ -1,0 +1,5 @@
+{
+  "backend": "onnx",
+  "count": 205,
+  "clip_vision_sha256": "4d907e1ca6461854c4dcb5849249d8541105fdcf568201e15e57f830902df0d3"
+}

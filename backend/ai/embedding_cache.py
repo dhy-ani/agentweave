@@ -8,9 +8,10 @@ each image embed costs real wall-clock time on this CPU-only box. Without
 a shared cache, running all three scripts back-to-back would re-embed the
 same 205 images three separate times.
 
-By default, embeddings come from ai.model_cache.embed_image -- i.e.
-whatever the live API currently serves (LoRA-tuned once
-backend/ai/data/lora_adapter/ exists, zero-shot base CLIP otherwise). The
+By default, embeddings come from ai.model_cache.embed_image using the
+PyTorch reference backend (AGENTWEAVE_BACKEND defaults to "torch" here;
+the live API serves the ONNX export of the same weights). That is LoRA-tuned
+once backend/ai/data/lora_adapter/ exists, zero-shot base CLIP otherwise. The
 cache is tagged by `is_lora_active()` so it's automatically invalidated
 when you go from zero-shot to LoRA-tuned (or vice versa).
 
@@ -27,6 +28,9 @@ from PIL import Image
 _AI_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(_AI_DIR)
 sys.path.append(os.path.join(_AI_DIR, "..", "..", "datasets"))
+
+# Offline scripts embed with the PyTorch reference model unless told otherwise.
+os.environ.setdefault("AGENTWEAVE_BACKEND", "torch")
 
 from data_split import load_manifest, PROCESSED_DIR  # noqa: E402
 import model_cache  # noqa: E402
@@ -85,19 +89,16 @@ def zero_shot_embedder():
     evaluate_retrieval.py's fixed zero-shot baseline even after the adapter
     has been trained (model_cache would otherwise always prefer it)."""
     import torch
-    from transformers import CLIPModel, CLIPProcessor
+    from clip_torch import as_tensor, device, load_merged_model
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    base = CLIPModel.from_pretrained(model_cache.CHECKPOINT)
-    processor = CLIPProcessor.from_pretrained(model_cache.CHECKPOINT)
+    base, processor, _ = load_merged_model(with_lora=False)
     base.to(device)
-    base.eval()
 
     def embed(image):
         inputs = processor(images=image, return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            feats = model_cache._as_tensor(base.get_image_features(**inputs))
+            feats = as_tensor(base.get_image_features(**inputs))
             feats = feats / feats.norm(dim=-1, keepdim=True)
         return feats.cpu().numpy().flatten().astype("float32")
 

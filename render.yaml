@@ -1,13 +1,20 @@
+# Alternative host to Vercel (backend/vercel.json). The serving runtime no
+# longer needs torch: CLIP and YOLOv8-pose run as ONNX models, which the build
+# downloads from the models-v1 GitHub release (checksums in
+# backend/ai/models/manifest.json).
 services:
   - type: web
     name: agentweave-backend
     runtime: python
     rootDir: backend
     buildCommand: >
-      pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu &&
-      pip install -r requirements.txt
+      pip install -r requirements.txt &&
+      python -c "from ai import artifacts; artifacts.fetch_all()"
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
       - key: DATABASE_URL
         value: sqlite:///./agentweave.db
     autoDeploy: true

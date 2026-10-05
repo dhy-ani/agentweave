@@ -28,4 +28,4 @@ for idx, filename in idx_to_image.items():
 with open(output_caption_path, "w") as f:
     json.dump(index_to_caption, f, indent=2)
 
-print("✅ index_to_caption.json updated with BLIP-generated captions.")
+print("index_to_caption.json updated with BLIP-generated captions.")

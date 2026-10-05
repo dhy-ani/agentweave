@@ -1,29 +1,53 @@
 """
 Database engine + session factory.
 
-Reads DATABASE_URL from .env.
-  SQLite  → sqlite:///./agentweave.db        (default, zero-config)
-  MySQL   → mysql+pymysql://user:pw@host/db
+DATABASE_URL selects the backend:
+  unset                    -> SQLite file backend/agentweave.db (local dev)
+                              or /tmp/agentweave.db on Vercel (ephemeral)
+  postgres://... / postgresql://...  -> Postgres via psycopg 3
+  any other SQLAlchemy URL is used as-is
 """
+from __future__ import annotations
+
+import logging
 import os
+import tempfile
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Load .env manually (no python-dotenv needed)
-_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-if os.path.exists(_env_path):
-    for line in open(_env_path):
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+import settings  # noqa: F401  (loads backend/.env before DATABASE_URL is read)
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./agentweave.db")
+logger = logging.getLogger(__name__)
 
-# SQLite needs check_same_thread=False; MySQL does not need it
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args, echo=False)
+
+def _default_url() -> str:
+    if os.environ.get("VERCEL"):
+        logger.warning("DATABASE_URL is not set on Vercel: using SQLite in /tmp, which is "
+                       "per-instance and wiped on cold start. Set DATABASE_URL to a Postgres database.")
+        return f"sqlite:///{os.path.join(tempfile.gettempdir(), 'agentweave.db')}"
+    return f"sqlite:///{os.path.join(BACKEND_DIR, 'agentweave.db')}"
+
+
+def normalize_database_url(url: str) -> str:
+    """Map the postgres:// / postgresql:// URLs handed out by hosting providers to psycopg 3."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = normalize_database_url(os.environ.get("DATABASE_URL") or _default_url())
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
+    pool_pre_ping=True,
+    echo=False,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -33,7 +57,7 @@ class Base(DeclarativeBase):
 
 
 def get_db():
-    """FastAPI dependency — yields a DB session and closes it after the request."""
+    """FastAPI dependency: yields a session and always closes it."""
     db = SessionLocal()
     try:
         yield db

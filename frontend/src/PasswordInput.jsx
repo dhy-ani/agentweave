@@ -16,7 +16,7 @@ function PasswordInput({ password, setPassword, onEnter }) {
       <button
         type="button"
         onClick={() => setShow(s => !s)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 text-xs transition-colors"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink text-xs transition-colors"
       >
         {show ? 'Hide' : 'Show'}
       </button>

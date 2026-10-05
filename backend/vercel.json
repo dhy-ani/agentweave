@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "python scripts/vercel_build.py",
+  "functions": {
+    "main.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{ai/data/embedding_cache_*.npz,ai/data/image_vectors.npy,ai/data/trends.index,ai/data/aesthetic_classifier.joblib,ai/data/lora_adapter/**,ai/data/eval/**,ai/models/fp32/**,uploads/**,tests/**,**/*.pt,**/*.pth,*.db,.env}"
+    }
+  }
+}

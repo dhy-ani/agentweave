@@ -1,0 +1,7 @@
+# Test and mutation-testing tools (on top of requirements.txt; no torch needed).
+#   pip install -r requirements.txt -r requirements-dev.txt
+pytest==9.0.2
+pytest-cov==7.1.0
+# httpx (used by fastapi.testclient) is already a serving dependency in requirements.txt.
+# mutmut does not support native Windows: run it on Linux, macOS or WSL.
+mutmut==3.8.0; sys_platform != "win32"

@@ -1,14 +1,22 @@
 """
-ORM models.  All tables are created via create_all() on startup.
-Compatible with both SQLite and MySQL — no dialect-specific types used.
+ORM models.  Tables are created via create_all() on startup (db/schema.py).
+Portable across SQLite and Postgres: no dialect-specific types used.
 """
 from datetime import datetime
 from sqlalchemy import (
-    String, Text, Float, Boolean, Integer,
+    String, Text, Float, Boolean, Integer, LargeBinary,
     DateTime, ForeignKey, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
+
+
+PLACEHOLDER_EMAIL_DOMAIN = "users.agentweave.invalid"
+
+
+def placeholder_email(firebase_uid: str) -> str:
+    """Stand-in email for users first seen via an endpoint that doesn't carry one."""
+    return f"{firebase_uid}@{PLACEHOLDER_EMAIL_DOMAIN}"
 
 
 class User(Base):
@@ -54,10 +62,12 @@ class WardrobeItem(Base):
     user_id: Mapped[int]    = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     item_uuid: Mapped[str]  = mapped_column(String(36), unique=True, index=True)  # UUID for file reference
     filename: Mapped[str]   = mapped_column(String(255))
+    image_url: Mapped[str | None]   = mapped_column(String(1024), nullable=True)  # set when stored in object storage
     category: Mapped[str]   = mapped_column(String(32), default="other")
     color: Mapped[str | None]       = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    clip_vector: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON-encoded list[float]
+    clip_embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)  # float32[512] bytes
+    clip_vector: Mapped[str | None] = mapped_column(Text, nullable=True)  # legacy: JSON-encoded list[float]
     added_at: Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="wardrobe_items")

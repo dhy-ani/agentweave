@@ -1,0 +1,24 @@
+# Training / evaluation / ONNX-export environment. Not deployed.
+#
+# Install torch + torchvision from the CPU wheel index FIRST, otherwise pip
+# resolves the default CUDA build (~2-3 GB):
+#   pip install torch==2.12.1 torchvision==0.27.1 --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-train.txt
+-r requirements.txt
+
+transformers==5.17.0
+peft==0.21.0
+safetensors==0.8.0
+open-clip-torch==3.3.0
+ultralytics==8.4.75
+faiss-cpu==1.14.3
+scikit-learn==1.9.1
+joblib==1.6.0
+optuna==5.0.0
+imagehash==4.3.2
+matplotlib==3.11.0
+tqdm==4.68.3
+
+# ONNX export + quantization (ai/export_onnx.py) and parity checks (ai/onnx_parity.py)
+onnx==1.23.1
+onnxscript==0.7.2

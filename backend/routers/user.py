@@ -10,10 +10,8 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
-import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from db.database import get_db
-from db.models import User, SavedOutfit, StylePreference, ShoppingClick
+from db.models import PLACEHOLDER_EMAIL_DOMAIN, User, SavedOutfit, StylePreference, ShoppingClick
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -75,6 +73,7 @@ def upsert_user(data: UserUpsert, db: Session = Depends(get_db)):
         if data.display_name is not None: user.display_name = data.display_name
         if data.body_type    is not None: user.body_type    = data.body_type
         if data.gender       is not None: user.gender       = data.gender
+        if user.email.endswith("@" + PLACEHOLDER_EMAIL_DOMAIN): user.email = data.email
     else:
         user = User(
             firebase_uid=data.firebase_uid,
