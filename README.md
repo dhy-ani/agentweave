@@ -6,6 +6,8 @@ AgentWeave is a fashion recommendation web app. Upload a full-body photo, descri
 - **Backend:** FastAPI, SQLAlchemy, ONNX Runtime, deployable on Vercel Functions (Render config kept as an alternative)
 - **ML:** LoRA-fine-tuned CLIP ViT-B/32 for retrieval (weight-only int8) and YOLOv8n-pose for body-shape estimation, both served as ONNX models without PyTorch
 
+**Live app:** https://dhy-ani.github.io/agentweave. API: https://agentweave-api.vercel.app ([health](https://agentweave-api.vercel.app/health), [docs](https://agentweave-api.vercel.app/docs)). Every push to `main` redeploys both.
+
 This README walks through how the app was rebuilt, stage by stage, the way a professional team would build it. Each stage links to the detailed document behind it, and the whole set is indexed in [docs/](docs/README.md): research, PRD, design decisions, [ADRs](docs/adr/README.md), the [model card](docs/ml/model-card.md) and [dataset card](docs/ml/dataset-card.md), and the [testing](docs/engineering/testing.md) and [deployment](docs/engineering/deployment.md) guides.
 
 | Preferences | Swipe deck | Saved board | Shop |
@@ -101,8 +103,9 @@ PyTorch, transformers and ultralytics are too large for a fast serverless functi
 - **Local runs without credentials.** The Firebase Auth Emulator with a `demo-` project lets anyone run the whole app without a Firebase account.
 
 ### 8. CI/CD
-- **CI** (`.github/workflows/ci.yml`) runs frontend tests and a build, plus backend tests, on every push and pull request. Mutation tests run weekly or on demand, since they're slow.
+- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request: frontend tests and build, backend tests, and both mutation suites.
 - **Frontend deploy** (`.github/workflows/deploy.yml`) publishes to GitHub Pages on every push to `main`.
+- **Backend deploy:** Vercel builds every push, as a preview for branches and production for `main`, from the connected GitHub repo. The model files come from the `models-v1` release and are hash-checked at build time.
 
 ---
 
@@ -278,7 +281,7 @@ Expect small run-to-run differences in the metrics: Optuna sampling and training
 
 The full guide, including the release checklist, is in [docs/engineering/deployment.md](docs/engineering/deployment.md). In short:
 
-1. **Publish the model files.** Run `bash backend/scripts/publish_models.sh` to upload the ONNX files as the `models-v1` GitHub release. The Vercel build downloads them from there and checks their hashes.
+1. **Publish the model files.** This is already done for this repo (`models-v1`); only re-export and publish a new tag if the model changes. The Vercel build downloads the files from the release and checks their hashes.
 2. **Create the Vercel project.** Import the repo and set **Root Directory** to `backend`; `vercel.json` is already configured.
 3. **Add storage.** A Postgres database (for example Neon) provides `DATABASE_URL`, and a public Vercel Blob store provides `BLOB_READ_WRITE_TOKEN`.
 4. **Set CORS.** Set `CORS_ORIGINS=https://<your-user>.github.io`.

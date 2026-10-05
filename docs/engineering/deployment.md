@@ -1,5 +1,16 @@
 # Deployment
 
+**Live:** frontend https://dhy-ani.github.io/agentweave, backend https://agentweave-api.vercel.app (`/health`, `/docs`).
+
+## How deploys happen automatically
+
+| Trigger | Frontend | Backend |
+|---|---|---|
+| Push to any branch or open a pull request | CI runs tests, build and mutation tests | Vercel builds a preview deployment (once the Vercel GitHub App can see the repo) |
+| Push or merge to `main` | `deploy.yml` builds and publishes to GitHub Pages | Vercel builds and promotes to production |
+
+The Vercel project (`agentweave-api`) was set up with the CLI. The exact commands are in section 2b so they can be repeated.
+
 The app is deployed in three parts:
 - **Frontend:** a static React build on GitHub Pages.
 - **Backend:** FastAPI on Vercel Functions, with `render.yaml` kept as an alternative host.
@@ -45,6 +56,27 @@ The ONNX models are too large to commit. Their names, sizes and SHA-256 hashes a
 - Memory: 2 GB on Hobby. The app uses about 385 MB with all models loaded.
 - Request body: 4.5 MB. The frontend downscales photos and the backend returns 413 above the limit.
 - `maxDuration` is set to 60 s in `vercel.json`.
+
+## 2b. What was run to create the live backend
+
+From the repo root, logged in with `vercel login`:
+
+```bash
+vercel project add agentweave-api
+# Root directory + framework (Git Bash on Windows: export MSYS_NO_PATHCONV=1 first)
+echo '{"rootDirectory":"backend","framework":"fastapi","sourceFilesOutsideRootDirectory":true}' > body.json
+vercel api /v9/projects/agentweave-api -X PATCH --input body.json
+vercel link --yes --project agentweave-api
+vercel blob create-store agentweave-wardrobe --access public -e production -e preview -e development --yes
+vercel integration add neon --name agentweave-db --plan free_v3   # sets DATABASE_URL
+printf 'https://dhy-ani.github.io,http://localhost:3000' | vercel env add CORS_ORIGINS production
+vercel deploy --prod
+vercel git connect https://github.com/dhy-ani/agentweave.git      # enables deploy-on-push
+```
+
+Deploying with the CLI from the repo root uses the root `.vercelignore`, which uploads only `backend/` and `datasets/processedImages/`. Git-triggered builds use `backend/.vercelignore`.
+
+`vercel git connect` only works once the Vercel GitHub App has access to the repository. Grant it at GitHub > Settings > Applications > Vercel > Configure > Repository access.
 
 ## 3. Frontend on GitHub Pages
 

@@ -1,0 +1,32 @@
+# Used by `vercel deploy` from the repo root (project Root Directory = backend).
+# Only backend/ and the curated images in datasets/processedImages are needed.
+frontend/
+docs/
+test/
+.github/
+datasets/rawImages/
+datasets/vectors/
+node_modules/
+
+# Backend files that must not be uploaded (mirrors backend/.vercelignore)
+backend/.env
+backend/*.db
+backend/uploads/
+backend/static/
+backend/.venv/
+backend/.venv-train/
+backend/tests/
+backend/mutants/
+backend/.coverage
+**/__pycache__/
+**/*.pyc
+backend/*.pt
+backend/ai/models/*.onnx
+backend/ai/models/fp32/
+backend/ai/data/embedding_cache_*.npz
+backend/ai/data/image_vectors.npy
+backend/ai/data/trends.index
+backend/ai/data/aesthetic_classifier.joblib
+backend/ai/data/lora_adapter/
+backend/ai/data/eval/
+.env*

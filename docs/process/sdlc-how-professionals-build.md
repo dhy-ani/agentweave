@@ -156,7 +156,7 @@ Consequences: Smaller deploy and faster cold start; export step must be re-run a
 
 **Why.** Small, frequent, automatically tested changes are easier to review and to roll back.
 
-**How AgentWeave applies this.** `.github/workflows/ci.yml` runs frontend tests and build plus backend tests on every push and pull request, and both mutation suites weekly or on demand; `deploy.yml` publishes the frontend to GitHub Pages; the backend targets Vercel ([deployment guide](../engineering/deployment.md)).
+**How AgentWeave applies this.** `.github/workflows/ci.yml` runs frontend tests and build plus backend tests on every push and pull request, and both mutation suites on every push and pull request; `deploy.yml` publishes the frontend to GitHub Pages and Vercel deploys the backend on every push ([deployment guide](../engineering/deployment.md)).
 
 ## 11. Observability
 
