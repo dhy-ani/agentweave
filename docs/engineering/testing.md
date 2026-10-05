@@ -100,4 +100,4 @@ mutmut results
 mutmut show <mutant-name>
 ```
 
-**CI** (`.github/workflows/ci.yml`) runs the unit and API suites and the frontend build on every push and pull request. Both mutation suites run weekly and on manual dispatch, and upload their reports as artifacts.
+**CI** (`.github/workflows/ci.yml`) runs the unit and API suites, the frontend build and both mutation suites on every push and pull request; the mutation jobs upload their reports as artifacts.

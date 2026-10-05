@@ -29,3 +29,8 @@ backend/uploads/
 *.pt
 *.pth
 # data files are small (<1MB) — keep them in git so deployment works
+.vercel
+.env
+.env.local
+.env.*.local
+!.env.example
