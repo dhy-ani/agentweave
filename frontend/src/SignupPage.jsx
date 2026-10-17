@@ -4,6 +4,7 @@ import { auth } from './firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import PasswordInput from './PasswordInput';
 import DoodleAccents from './components/DoodleAccents';
+import { authErrorMessage } from './lib/authErrors';
 
 function SignupPage() {
   const [email, setEmail] = useState('');
@@ -16,16 +17,10 @@ function SignupPage() {
     setError('');
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
       navigate('/dashboard');
     } catch (e) {
-      if (e.code === 'auth/email-already-in-use') {
-        setError('An account with this email already exists.');
-      } else if (e.code === 'auth/weak-password') {
-        setError('Password must be at least 6 characters.');
-      } else {
-        setError(e.message);
-      }
+      setError(authErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -46,7 +41,7 @@ function SignupPage() {
           <h2 className="text-lg font-semibold text-ink">Create account</h2>
 
           {error && (
-            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {error}
             </p>
           )}

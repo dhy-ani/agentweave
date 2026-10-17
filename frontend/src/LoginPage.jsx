@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import PasswordInput from './PasswordInput';
 import DoodleAccents from './components/DoodleAccents';
+import { authErrorMessage, POPUP_UNAVAILABLE, SILENT_ERRORS } from './lib/authErrors';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,14 +14,12 @@ function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Handle the redirect result when Google sends the user back
+    // Only reached when the popup was blocked and we fell back to a redirect.
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) navigate('/dashboard');
       })
-      .catch((e) => {
-        setError(`Google sign-in failed: ${e.message}`);
-      });
+      .catch((e) => setError(authErrorMessage(e)));
 
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) navigate('/dashboard');
@@ -35,16 +34,28 @@ function LoginPage() {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       navigate('/dashboard');
     } catch (e) {
-      setError('Invalid email or password.');
+      setError(authErrorMessage(e));
     } finally {
       setLoading(false);
     }
   };
 
-  const loginWithGoogle = () => {
+  // Popup, not redirect: the app is hosted on github.io while Firebase's auth
+  // domain is firebaseapp.com, and browsers that partition third-party storage
+  // lose the redirect result, sending the user straight back to this page.
+  // https://firebase.google.com/docs/auth/web/redirect-best-practices
+  const loginWithGoogle = async () => {
     setError('');
-    // Redirect to Google — no popup, works on all browsers and hosted domains
-    signInWithRedirect(auth, googleProvider);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      navigate('/dashboard');
+    } catch (e) {
+      if (POPUP_UNAVAILABLE.has(e?.code)) {
+        await signInWithRedirect(auth, googleProvider);
+      } else if (!SILENT_ERRORS.has(e?.code)) {
+        setError(authErrorMessage(e));
+      }
+    }
   };
 
   return (
@@ -63,7 +74,7 @@ function LoginPage() {
           <h2 className="text-lg font-semibold text-ink">Sign in</h2>
 
           {error && (
-            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
