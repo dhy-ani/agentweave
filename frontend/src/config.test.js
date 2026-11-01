@@ -19,10 +19,11 @@ describe("config", () => {
     expect(imageUrl("boho beach_1.jpg")).toBe("https://agentweave-api.vercel.app/images/boho%20beach_1.jpg");
   });
 
-  test("prefers a stored blob URL for wardrobe images", () => {
+  test("closet photos keep full URLs and resolve API-relative paths", () => {
     delete process.env.REACT_APP_API_URL;
-    const { wardrobeImageUrl } = require("./config");
-    expect(wardrobeImageUrl({ image_url: "https://blob.example/x.jpg", filename: "x.jpg" })).toBe("https://blob.example/x.jpg");
-    expect(wardrobeImageUrl({ filename: "x.jpg" })).toBe("http://localhost:8001/wardrobe-images/x.jpg");
+    const { closetImageUrl } = require("./config");
+    expect(closetImageUrl("https://x.public.blob.vercel-storage.com/closet/u1/a.jpg")).toBe("https://x.public.blob.vercel-storage.com/closet/u1/a.jpg");
+    expect(closetImageUrl("http://cdn.test/a.jpg")).toBe("http://cdn.test/a.jpg");
+    expect(closetImageUrl("/closet-images/u1/a.jpg")).toBe("http://localhost:8001/closet-images/u1/a.jpg");
   });
 });

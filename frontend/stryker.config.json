@@ -9,11 +9,14 @@
   "coverageAnalysis": "perTest",
   "mutate": [
     "src/lib/**/*.js",
+    "src/data/**/*.js",
     "src/config.js",
+    "src/LoginPage.jsx",
     "src/components/FashionCard.jsx",
     "src/components/SavedBoard.jsx",
     "src/components/ShoppingPanel.jsx",
     "src/components/Dashboard.jsx",
+    "src/components/WardrobeManager.jsx",
     "!src/**/*.test.js",
     "!src/**/*.test.jsx",
     "!src/lib/resizeImage.js:13-40"

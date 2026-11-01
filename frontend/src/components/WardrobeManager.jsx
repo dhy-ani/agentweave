@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { auth } from "../firebase";
 import { HangerIcon, SparkleIcon, SpinnerIcon, XIcon } from "./icons";
-import { API, imageUrl, wardrobeImageUrl } from "../config";
+import { imageUrl, closetImageUrl } from "../config";
 import { resizeImage } from "../lib/resizeImage";
+import { apiRequest } from "../lib/api";
+import { subscribeCloset, addClosetItem, deleteClosetItem } from "../data/userData";
 
 const CATEGORIES = ["top", "bottom", "dress", "outerwear", "shoes", "accessory", "other"];
 const EMPTY = { category: "top", color: "", description: "" };
@@ -19,18 +21,10 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
 
   const uid = auth.currentUser?.uid;
 
-  const fetchItems = useCallback(async () => {
-    if (!uid) return;
-    try {
-      const r = await fetch(`${API}/wardrobe/items?firebase_uid=${encodeURIComponent(uid)}`);
-      const d = await r.json();
-      setItems(d.items || []);
-    } catch {
-      setError("Could not load your closet.");
-    }
+  useEffect(() => {
+    if (!uid) return undefined;
+    return subscribeCloset(uid, setItems, () => setError("Could not load your closet."));
   }, [uid]);
-
-  useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleFile = (e) => {
     const f = e.target.files[0];
@@ -39,6 +33,9 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
     setPreview({ file: f, url: URL.createObjectURL(f) });
   };
 
+  // The API stores the photo and returns its CLIP embedding; the item record
+  // itself is written to Firestore. If that write fails the photo is removed
+  // again so no orphaned files are left behind.
   const handleUpload = async () => {
     if (!preview?.file || !uid) return;
     setUploading(true);
@@ -46,32 +43,32 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
     try {
       const fd = new FormData();
       fd.append("file", await resizeImage(preview.file));
-      fd.append("firebase_uid", uid);
       fd.append("category", form.category);
-      fd.append("color", form.color);
-      fd.append("description", form.description);
-      const r = await fetch(`${API}/wardrobe/upload`, { method: "POST", body: fd });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.detail || `Upload failed (HTTP ${r.status}).`);
+      const stored = await apiRequest("/closet/items", { method: "POST", body: fd, authenticated: true });
+      try {
+        await addClosetItem(uid, stored, form);
+      } catch (e) {
+        await apiRequest(`/closet/items/${stored.item_id}`, { method: "DELETE", authenticated: true }).catch(() => {});
+        throw e;
       }
       setPreview(null);
       setForm(EMPTY);
       if (fileRef.current) fileRef.current.value = "";
-      await fetchItems();
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Upload failed.");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDelete = async (itemUuid) => {
+  const handleDelete = async (itemId) => {
     if (!uid) return;
+    setError("");
     try {
-      await fetch(`${API}/wardrobe/items/${itemUuid}?firebase_uid=${encodeURIComponent(uid)}`, { method: "DELETE" });
-    } finally {
-      await fetchItems();
+      await deleteClosetItem(uid, itemId);
+      await apiRequest(`/closet/items/${itemId}`, { method: "DELETE", authenticated: true });
+    } catch {
+      setError("Could not remove that item.");
     }
   };
 
@@ -81,19 +78,19 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
     setSuggestion(null);
     setError("");
     try {
-      const r = await fetch(`${API}/wardrobe/suggest`, {
+      const result = await apiRequest("/closet/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firebase_uid: uid,
+        authenticated: true,
+        json: {
           occasion: occasion || "casual",
           weather: weather || "mild",
           gender: gender || "",
           body_type: bodyType || "",
-        }),
+          items: items.map(({ id, category, embedding }) => ({ id, category, embedding })),
+        },
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setSuggestion(await r.json());
+      const byId = new Map(items.map(i => [i.id, i]));
+      setSuggestion({ ...result, outfit: (result.outfit || []).map(o => byId.get(o.id)).filter(Boolean) });
     } catch {
       setError("Could not build a suggestion right now.");
     } finally {
@@ -146,13 +143,13 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
       {items.length > 0 && (
         <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {items.map(item => (
-            <li key={item.item_uuid} className="relative group bg-surface border border-line rounded-xl overflow-hidden">
-              <img src={wardrobeImageUrl(item)} alt={item.description || item.category} className="w-full aspect-square object-cover" loading="lazy" />
+            <li key={item.id} className="relative group bg-surface border border-line rounded-xl overflow-hidden">
+              <img src={closetImageUrl(item.imageUrl)} alt={item.description || item.category} className="w-full aspect-square object-cover" loading="lazy" />
               <div className="p-2">
                 <p className="text-xs font-medium text-ink-soft capitalize">{item.category}</p>
                 {item.color && <p className="text-xs text-muted">{item.color}</p>}
               </div>
-              <button onClick={() => handleDelete(item.item_uuid)} aria-label={`Remove ${item.category}`}
+              <button onClick={() => handleDelete(item.id)} aria-label={`Remove ${item.category}`}
                 className="absolute top-2 right-2 w-7 h-7 bg-surface/90 border border-line-strong hover:border-red-500 text-ink rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center">
                 <XIcon className="w-3.5 h-3.5" />
               </button>
@@ -173,8 +170,8 @@ export default function WardrobeManager({ occasion, weather, bodyType, gender })
               <p className="text-sm text-ink-soft leading-relaxed">{suggestion.suggestion}</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {(suggestion.outfit || []).map(item => (
-                  <div key={item.item_uuid} className="bg-surface-2 rounded-xl overflow-hidden">
-                    <img src={wardrobeImageUrl(item)} alt={item.description || item.category} className="w-full aspect-square object-cover" />
+                  <div key={item.id} className="bg-surface-2 rounded-xl overflow-hidden">
+                    <img src={closetImageUrl(item.imageUrl)} alt={item.description || item.category} className="w-full aspect-square object-cover" />
                     <p className="text-xs text-center text-muted py-1 capitalize">{item.category}</p>
                   </div>
                 ))}

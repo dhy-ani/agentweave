@@ -5,7 +5,7 @@ embeddings used by backend/routers/stylegenie.py.
 Serving no longer reads trends.index: it searches ai/data/corpus_embeddings.npy
 with numpy (ai/retrieval.py), which this script refreshes at the end via
 ai/build_corpus_embeddings.py. trends.index / image_vectors.npy are still
-written for the legacy FAISS scripts (ai/search_similar.py etc.).
+written, although nothing in the repo reads them any more.
 
 Fixes vs. the original script (Part A1 of the ML overhaul plan):
   - The original called `merge_clip_with_captions(path)` with a single image
@@ -30,10 +30,8 @@ Fixes vs. the original script (Part A1 of the ML overhaul plan):
     is present (see ai/model_cache.py), keeping ingestion and serving in sync.
   - No longer generates ai/data/index_to_timestamp.json. The old file was
     populated with a fresh `datetime.now()` for every single image (not even
-    randomized — see ai/generate_timestamps.py for the actually-random
-    version used elsewhere), and it fed a fabricated "trendiness" score.
-    That's removed from the live path in routers/stylegenie.py (Part A7);
-    ai/generate_timestamps.py itself is left in place but unused.
+    randomized), and it fed a fabricated "trendiness" score. That's removed
+    from the live path in routers/stylegenie.py (Part A7).
   - Additionally writes ai/data/index_to_label.json (verified aesthetic
     category per index) so cluster-share stats and evaluation scripts don't
     have to re-derive labels from filenames.

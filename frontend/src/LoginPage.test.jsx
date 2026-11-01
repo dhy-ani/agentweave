@@ -95,3 +95,50 @@ test("an already signed-in user skips the login page", async () => {
   renderPage();
   await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/dashboard"));
 });
+
+test("the button shows progress while signing in and recovers after a failure", async () => {
+  let fail;
+  fb().signInWithEmailAndPassword.mockReturnValue(new Promise((_, rej) => { fail = () => rej(err("auth/invalid-credential")); }));
+  renderPage();
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  expect(await screen.findByRole("button", { name: "Signing in…" })).toBeDisabled();
+  fail();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect email or password.");
+  expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  expect(screen.getByPlaceholderText("Email")).toHaveValue("");
+  expect(screen.getByPlaceholderText("Password")).toHaveValue("");
+});
+
+test("Enter in the email field signs in; other keys don't", async () => {
+  fb().signInWithEmailAndPassword.mockResolvedValue({ user: { uid: "u1" } });
+  renderPage();
+  const email = screen.getByPlaceholderText("Email");
+  fireEvent.keyDown(email, { key: "a" });
+  expect(fb().signInWithEmailAndPassword).not.toHaveBeenCalled();
+  fireEvent.keyDown(email, { key: "Enter" });
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/dashboard"));
+});
+
+test("a failed redirect sign-in is reported", async () => {
+  fb().getRedirectResult.mockRejectedValue(err("auth/operation-not-allowed"));
+  renderPage();
+  expect(await screen.findByRole("alert")).toHaveTextContent("turned off");
+});
+
+test("a signed-out auth state stays on the page, and the listener is removed on unmount", async () => {
+  const unsub = jest.fn();
+  fb().onAuthStateChanged.mockImplementation((auth, cb) => { cb(null); return unsub; });
+  const { unmount } = renderPage();
+  await waitFor(() => expect(fb().onAuthStateChanged).toHaveBeenCalled());
+  expect(mockNavigate).not.toHaveBeenCalled();
+  unmount();
+  expect(unsub).toHaveBeenCalled();
+});
+
+test("a Google failure without an error code still shows a message", async () => {
+  fb().signInWithPopup.mockRejectedValue(undefined);
+  renderPage();
+  fireEvent.click(google());
+  expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in failed. Please try again.");
+  expect(fb().signInWithRedirect).not.toHaveBeenCalled();
+});

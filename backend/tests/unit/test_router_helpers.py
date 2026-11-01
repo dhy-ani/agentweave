@@ -141,5 +141,15 @@ def test_build_result_fields(monkeypatch, corpus):
     }
 
 
+def test_build_result_uses_text_calibration_by_default_and_rounds_similarity(monkeypatch, corpus):
+    # Text and image tables differ from the uncalibrated fallback (100 * cosine).
+    monkeypatch.setattr(score_calibration, "load_calibration", lambda: {
+        "text": np.linspace(0, 0.5, 101), "image": np.linspace(0, 2, 101)})
+    result = _build_result(3, 0.123456)
+    assert result["match_score"] == 24.7
+    assert result["similarity"] == 0.1235
+    assert _build_result(3, 0.123456, "image")["match_score"] == 6.2
+
+
 def test_retrieval_sizes():
     assert (stylegenie.MMR_CANDIDATES, stylegenie.IMAGE_SEARCH_CANDIDATES, stylegenie.RESULTS) == (30, 20, 10)

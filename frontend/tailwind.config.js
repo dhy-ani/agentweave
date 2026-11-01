@@ -9,8 +9,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        serif: ["Fraunces", "Georgia", "serif"],
-        sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["Bodoni Moda", "Didot", "Georgia", "serif"],
+        sans: ["Jost", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
         canvas: "#FFF7E6",

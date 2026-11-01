@@ -13,6 +13,12 @@ jest.mock("react-router-dom", () => ({
 jest.mock("firebase/auth", () => ({ onAuthStateChanged: jest.fn(), signOut: jest.fn() }));
 jest.mock("../firebase", () => ({ auth: { currentUser: { uid: "u1" } } }));
 jest.mock("../lib/resizeImage", () => ({ resizeImage: jest.fn() }));
+jest.mock("../data/userData", () => ({
+  ensureProfile: jest.fn(), updateProfile: jest.fn(), saveLook: jest.fn(), recordSwipe: jest.fn(),
+  subscribeSavedLooks: jest.fn(), deleteLook: jest.fn(), subscribeCloset: jest.fn(),
+  addClosetItem: jest.fn(), deleteClosetItem: jest.fn(), recordShopClick: jest.fn(),
+}));
+const data = () => require("../data/userData");
 
 const RESULTS = [
   { image: "boho_beach_3.jpg", result: "Look one", match_score: 81, future_projection: "Strong match" },
@@ -26,8 +32,6 @@ function routeFetch(overrides = {}) {
     if (overrides[path]) return overrides[path](opts);
     if (path === "/analyze-body") return reply({ body_type: "hourglass" });
     if (path === "/stylegenie/trend_vector") return reply({ results: RESULTS });
-    if (path.startsWith("/users/u1/outfits")) return reply({ outfits: [] });
-    if (path.startsWith("/wardrobe/items")) return reply({ items: [] });
     return reply({ ok: true });
   });
 }
@@ -41,6 +45,11 @@ beforeEach(() => {
   firebaseAuth.signOut.mockImplementation(() => Promise.resolve());
   require("../lib/resizeImage").resizeImage.mockImplementation(f => Promise.resolve(f));
   global.URL.createObjectURL = jest.fn(() => "blob:preview");
+  for (const fn of ["ensureProfile", "updateProfile", "saveLook", "recordSwipe", "deleteLook", "recordShopClick"]) {
+    data()[fn].mockResolvedValue(undefined);
+  }
+  data().subscribeSavedLooks.mockImplementation((uid, onData) => { onData([]); return () => {}; });
+  data().subscribeCloset.mockImplementation((uid, onData) => { onData([]); return () => {}; });
   mockUser = { uid: "u1", email: "demo@agentweave.test", displayName: null };
   mockNavigate.mockReset();
   routeFetch();
@@ -67,8 +76,7 @@ function fillPreferences() {
 test("syncs the signed-in user and starts at step 1", () => {
   renderDashboard();
   expect(screen.getByText("Start with your shape")).toBeInTheDocument();
-  const [, opts] = calls("/users/upsert")[0];
-  expect(JSON.parse(opts.body)).toEqual({ firebase_uid: "u1", email: "demo@agentweave.test", display_name: null });
+  expect(data().ensureProfile).toHaveBeenCalledWith(mockUser);
 });
 
 test("redirects to login when signed out", () => {
@@ -81,8 +89,7 @@ test("body analysis unlocks preferences and persists the shape", async () => {
   renderDashboard();
   await analyseBody();
   expect(screen.getByText("hourglass")).toBeInTheDocument();
-  await waitFor(() => expect(calls("/users/u1/profile")).toHaveLength(1));
-  expect(calls("/users/u1/profile")[0][1].method).toBe("PATCH");
+  await waitFor(() => expect(data().updateProfile).toHaveBeenCalledWith("u1", { bodyType: "hourglass", gender: null }));
 });
 
 test("an unreadable photo shows an error instead of advancing", async () => {
@@ -115,11 +122,11 @@ test("full flow: recommend, swipe, save, then shop", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Like" }));
   expect(await screen.findByText("Look two")).toBeInTheDocument();
-  expect(JSON.parse(calls("/users/swipe")[0][1].body)).toMatchObject({ liked: true, image_filename: "boho_beach_3.jpg" });
+  expect(data().recordSwipe).toHaveBeenCalledWith("u1", RESULTS[0], true, "brunch");
 
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("status")).toHaveTextContent("Saved to your board");
-  expect(JSON.parse(calls("/users/outfits/save")[0][1].body)).toMatchObject({ image_filename: "minimalist_0.jpg", trendiness_score: 55 });
+  expect(data().saveLook).toHaveBeenCalledWith("u1", RESULTS[1], { occasion: "brunch", weather: "warm" });
   expect(screen.getByText("Look two")).toBeInTheDocument();
 
   const shop = screen.getByRole("button", { name: /shop this look/i });
@@ -135,8 +142,7 @@ test("a pass is recorded as a dislike", async () => {
   fireEvent.click(screen.getByRole("button", { name: /get my outfit/i }));
   await screen.findByText("Look one");
   fireEvent.click(screen.getByRole("button", { name: "Pass" }));
-  await waitFor(() => expect(calls("/users/swipe")).toHaveLength(1));
-  expect(JSON.parse(calls("/users/swipe")[0][1].body).liked).toBe(false);
+  await waitFor(() => expect(data().recordSwipe).toHaveBeenCalledWith("u1", RESULTS[0], false, "brunch"));
 });
 
 test("a failed recommendation request shows a retry message", async () => {
@@ -267,14 +273,11 @@ test("the last card says so after the user acts on it", async () => {
 test("profile sync and shape updates carry the user's details", async () => {
   mockUser = { uid: "u1", email: "demo@agentweave.test", displayName: "Dee" };
   renderDashboard();
-  expect(JSON.parse(calls("/users/upsert")[0][1].body).display_name).toBe("Dee");
-  expect(calls("/users/upsert")[0][1].headers).toEqual({ "Content-Type": "application/json" });
+  expect(data().ensureProfile).toHaveBeenCalledWith(expect.objectContaining({ displayName: "Dee" }));
   await analyseBody();
-  await waitFor(() => expect(calls("/users/u1/profile")).toHaveLength(1));
-  expect(JSON.parse(calls("/users/u1/profile")[0][1].body)).toEqual({ firebase_uid: "u1", email: "demo@agentweave.test", body_type: "hourglass", gender: null });
+  await waitFor(() => expect(data().updateProfile).toHaveBeenCalledTimes(1));
   fireEvent.click(screen.getByRole("button", { name: "woman" }));
-  await waitFor(() => expect(calls("/users/u1/profile")).toHaveLength(2));
-  expect(JSON.parse(calls("/users/u1/profile")[1][1].body).gender).toBe("woman");
+  await waitFor(() => expect(data().updateProfile).toHaveBeenLastCalledWith("u1", { bodyType: "hourglass", gender: "woman" }));
 });
 
 test("only the active tab's content is shown and marked current", async () => {
@@ -319,4 +322,29 @@ test("the profile menu closes when clicking outside", () => {
   expect(toggle).toHaveAttribute("aria-expanded", "true");
   fireEvent.click(document.querySelector(".fixed.inset-0"));
   expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+});
+
+test("a failed save shows an error and no confirmation", async () => {
+  renderDashboard();
+  await analyseBody();
+  fillPreferences();
+  fireEvent.click(screen.getByRole("button", { name: /get my outfit/i }));
+  await screen.findByText("Look one");
+  data().saveLook.mockRejectedValueOnce(new Error("permission-denied"));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that look");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+test("a failed swipe write never blocks the deck", async () => {
+  const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+  data().recordSwipe.mockRejectedValue(new Error("offline"));
+  renderDashboard();
+  await analyseBody();
+  fillPreferences();
+  fireEvent.click(screen.getByRole("button", { name: /get my outfit/i }));
+  await screen.findByText("Look one");
+  fireEvent.click(screen.getByRole("button", { name: "Pass" }));
+  expect(await screen.findByText("Look two")).toBeInTheDocument();
+  await waitFor(() => expect(warn).toHaveBeenCalledWith("Swipe failed:", "offline"));
 });

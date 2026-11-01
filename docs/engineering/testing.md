@@ -5,7 +5,7 @@
 | Layer | What it checks | Tools | Where |
 |---|---|---|---|
 | Unit | Pure logic: swipe direction and card transform, budget guards, prompt building, retrieval math, MMR, score calibration, body-shape rules, ONNX pre/post-processing, artifact checksums, storage, settings | Jest; pytest | `frontend/src/lib/*.test.js`, `backend/tests/unit/` |
-| Component / API | Components with mocked `fetch` and Firebase; every FastAPI endpoint through `TestClient` with fake models, an in-memory SQLite database per test and a temporary upload directory | React Testing Library; pytest + FastAPI TestClient | `frontend/src/components/*.test.jsx`, `backend/tests/api/` |
+| Component / API | Components with mocked `fetch` and Firebase; every FastAPI endpoint through `TestClient` with fake models, locally signed Firebase-style ID tokens and a temporary upload directory | React Testing Library; pytest + FastAPI TestClient | `frontend/src/components/*.test.jsx`, `backend/tests/api/` |
 | Model smoke | Real ONNX models end to end (skipped when model files are absent, as in CI) | pytest `-m models` | `backend/tests/test_models_smoke.py` |
 | Model parity | ONNX int8 against PyTorch fp32: embedding cosine, top-10 overlap, retrieval metrics, pose keypoints | `backend/ai/onnx_parity.py` | [onnx_parity.md](../../backend/ai/data/eval/onnx_parity.md) |
 | Real browser | The swipe deck and full flow in headless Chrome against the real backend and Firebase emulator | Playwright (`playwright-core` + system Chrome) | `frontend/scripts/capture-screenshots.mjs` |
@@ -17,26 +17,30 @@
 
 | Suite | Count | Result |
 |---|---|---|
-| Frontend (Jest + RTL) | 99 tests | All pass |
-| Backend (pytest) | 347 tests: 344 unit and API tests with fake models, plus 3 real-model smoke tests | All pass on Windows and on a clean Ubuntu clone; the smoke tests skip in CI |
+| Frontend (Jest + RTL) | 178 tests | All pass |
+| Firestore Security Rules (emulator) | 20 tests | All pass |
+| Backend (pytest) | 498 tests: 495 unit and API tests with fake models, plus 3 real-model smoke tests; 99% coverage | All pass on Windows and on a clean Ubuntu clone; the smoke tests skip in CI |
 | Backend branch coverage (serving code) | | 100% for most modules; 94–99% for `main`, `shopping`, `onnx_inference`, `model_cache`, `body_shape_classifier` |
 
 ### Mutation scores
 
-**Frontend (StrykerJS 10, Jest runner):** 63.3% before targeted tests, **87.8%** after.
+**Frontend (StrykerJS 10, Jest runner):** 63.3% before targeted tests, **91.4%** after (891 of 982 killed, 4 timeouts).
 
 | Module | Score |
 |---|---|
-| `lib/budget.js` | 100% |
-| `lib/recommendation.js` | 100% |
-| `config.js` | 100% |
-| `ShoppingPanel` | 94.6% |
-| `lib/swipe.js` | 89.3% |
-| `SavedBoard` | 87.4% |
-| `Dashboard` | 85.8% |
-| `FashionCard` | 67.7% |
+| `lib/authErrors.js`, `lib/budget.js`, `lib/recommendation.js` | 100% |
+| `data/userData.js` | 98.2% |
+| `lib/api.js` | 97.2% |
+| `ShoppingPanel` | 95.5% |
+| `FashionCard` | 93.2% |
+| `LoginPage` | 92.9% |
+| `lib/swipe.js` | 92.1% |
+| `config.js` | 90.0% |
+| `WardrobeManager` | 89.1% |
+| `SavedBoard` | 85.7% |
+| `Dashboard` | 85.0% |
 
-**Backend (mutmut 3.8, WSL / Ubuntu):** 85.6% before targeted tests, **94.2%** after (1117 of 1186 mutants killed).
+**Backend (mutmut 3.8, WSL / Ubuntu):** 85.6% before targeted tests, **95.1%** after the Firestore refactor (1484 of 1561 mutants killed, 5 timeouts). New code: `auth.py` has 2 equivalent survivors (header-name casing), `routers/closet.py` has none.
 
 | Module | Killed / total |
 |---|---|

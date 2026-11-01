@@ -1,6 +1,6 @@
 # 0004. Run the API on Vercel Functions with external state
 
-Status: Accepted. Supersedes Render as the only target; `render.yaml` is kept as an alternative.
+Status: Accepted. Supersedes Render as the only target; `render.yaml` is kept as an alternative. The database decision below is superseded by [0007](0007-firestore-user-data.md).
 
 ## Context
 The product owner asked for the backend to be deployable on Vercel. Vercel Functions have a read-only filesystem except `/tmp`, a 4.5 MB request body limit, and instances that can be recycled at any time. The backend previously wrote SQLite and uploaded wardrobe photos to local disk.

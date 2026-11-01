@@ -9,7 +9,8 @@ import ShoppingPanel from "./ShoppingPanel";
 import SavedBoard from "./SavedBoard";
 import DoodleAccents from "./DoodleAccents";
 import { SparkleIcon, ClosetIcon, BagIcon, SpinnerIcon, ProfileIcon, HeartIcon } from "./icons";
-import { API } from "../config";
+import { apiRequest } from "../lib/api";
+import { ensureProfile, updateProfile, saveLook, recordSwipe } from "../data/userData";
 import {
   OCCASIONS, WEATHERS, LOCATIONS, GENDERS, EMPTY_FORM,
   missingFields, buildRecommendationRequest, nextIndex, isLastCard,
@@ -22,17 +23,10 @@ const TABS = [
   { id: "shop", label: "Shop", Icon: BagIcon },
 ];
 
-async function postJSON(path, body, method = "POST") {
-  try {
-    await fetch(`${API}${path}`, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    // Stryker disable next-line all: best-effort analytics call; failures are only logged
-    console.warn(`${path} failed:`, e.message);
-  }
+// Profile sync and swipe history must never block the UI.
+function inBackground(promise, what) {
+  // Stryker disable next-line all: best-effort write; failures are only logged
+  promise.catch((e) => console.warn(`${what} failed:`, e.message));
 }
 
 function ChipGroup({ label, options, value, onChange }) {
@@ -70,6 +64,7 @@ const Dashboard = () => {
   const [loadingRec, setLoadingRec] = useState(false);
   const [formError, setFormError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [hasInteracted, setHasInteracted] = useState(false);
   const [deckDone, setDeckDone] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -82,11 +77,7 @@ const Dashboard = () => {
       setAuthLoading(false);
       if (user) {
         setCurrentUser(user);
-        postJSON("/users/upsert", {
-          firebase_uid: user.uid,
-          email: user.email,
-          display_name: user.displayName || null,
-        });
+        inBackground(ensureProfile(user), "Profile sync");
       } else {
         navigate("/login");
       }
@@ -96,12 +87,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (currentUser && bodyType) {
-      postJSON(`/users/${currentUser.uid}/profile`, {
-        firebase_uid: currentUser.uid,
-        email: currentUser.email,
-        body_type: bodyType,
-        gender: form.gender || null,
-      }, "PATCH");
+      inBackground(updateProfile(currentUser.uid, { bodyType, gender: form.gender || null }), "Profile update");
     }
   }, [bodyType, currentUser, form.gender]);
 
@@ -119,13 +105,10 @@ const Dashboard = () => {
     setHasInteracted(false);
     setDeckDone(false);
     try {
-      const res = await fetch(`${API}/stylegenie/trend_vector`, {
+      const data = await apiRequest("/stylegenie/trend_vector", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildRecommendationRequest(form, bodyType)),
+        json: buildRecommendationRequest(form, bodyType),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       setResults(data.results || []);
       setCurrentIndex(0);
       setEditing(false);
@@ -143,27 +126,16 @@ const Dashboard = () => {
     const uid = currentUser?.uid;
 
     if (dir === "up") {
-      if (uid) {
-        await postJSON("/users/outfits/save", {
-          firebase_uid: uid,
-          image_filename: rec.image,
-          caption: rec.result,
-          trendiness_score: rec.match_score ?? rec.trendiness_score,
-          future_projection: rec.future_projection,
-          occasion: form.occasion,
-          weather: form.weather,
-        });
+      setSaveError("");
+      try {
+        if (uid) await saveLook(uid, rec, { occasion: form.occasion, weather: form.weather });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch (e) {
+        setSaveError("Couldn't save that look. Please try again.");
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     } else if (uid) {
-      await postJSON("/users/swipe", {
-        firebase_uid: uid,
-        image_filename: rec.image,
-        caption: rec.result,
-        liked: dir === "right",
-        occasion: form.occasion,
-      });
+      inBackground(recordSwipe(uid, rec, dir === "right", form.occasion), "Swipe");
     }
     if (dir !== "up" && isLastCard(currentIndex, results.length)) setDeckDone(true);
     setCurrentIndex(i => nextIndex(dir, i, results.length));
@@ -287,6 +259,8 @@ const Dashboard = () => {
                     </button>
                   )}
                 </div>
+
+                {saveError && <p role="alert" className="text-sm text-red-700 text-center">{saveError}</p>}
 
                 <FashionCard
                   key={currentIndex}

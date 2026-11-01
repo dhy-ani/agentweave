@@ -2,6 +2,12 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ShoppingPanel from "./ShoppingPanel";
 
+jest.mock("../firebase", () => ({ auth: { currentUser: null } }));
+jest.mock("../data/userData", () => ({ recordShopClick: jest.fn() }));
+const data = () => require("../data/userData");
+
+beforeEach(() => data().recordShopClick.mockResolvedValue(undefined));
+
 const brand = (name, extra = {}) => ({
   brand: name, tier: "Budget", item: "Maxi dress", est_price: 45, price_range: "$20-$80",
   within_budget: true, search_url: `https://shop.example/${name}`, relevance: 0.6, style_note: "Good value", ...extra,
@@ -38,7 +44,7 @@ test("sliders cannot cross each other", () => {
 });
 
 test("fetches in-budget and stretch picks and opens the retailer", async () => {
-  fetch.mockReturnValueOnce(reply(RESPONSE)).mockReturnValueOnce(reply({ ok: true }));
+  fetch.mockReturnValueOnce(reply(RESPONSE));
   const open = jest.spyOn(window, "open").mockImplementation(() => null);
   render(<ShoppingPanel styleCaption="boho dress" occasion="brunch" firebaseUid="u1" />);
   fireEvent.click(screen.getByRole("button", { name: /find this look online/i }));
@@ -50,7 +56,7 @@ test("fetches in-budget and stretch picks and opens the retailer", async () => {
   expect(cta).toHaveTextContent("🛒");
   fireEvent.click(cta);
   await waitFor(() => expect(open).toHaveBeenCalledWith("https://shop.example/H&M", "_blank", "noopener,noreferrer"));
-  expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({ firebase_uid: "u1", brand: "H&M" });
+  expect(data().recordShopClick).toHaveBeenCalledWith("u1", RESPONSE.within_budget[0], "brunch");
 
   fireEvent.click(screen.getByRole("button", { name: /stretch picks/i }));
   expect(screen.getByText("Reformation")).toBeInTheDocument();
@@ -116,27 +122,33 @@ test("shows a loading label while stores are fetched", async () => {
   expect(screen.getByRole("button", { name: /find this look online/i })).toBeEnabled();
 });
 
-test("does not record clicks for signed-out users, and sends a null occasion", async () => {
+test("clicks are recorded only for signed-in users, and the retailer opens either way", async () => {
   const open = jest.spyOn(window, "open").mockImplementation(() => null);
-  fetch.mockReturnValueOnce(reply(RESPONSE)).mockReturnValue(reply({ ok: true }));
+  fetch.mockReturnValueOnce(reply(RESPONSE));
   const { unmount } = render(<ShoppingPanel styleCaption="boho dress" />);
   fireEvent.click(screen.getByRole("button", { name: /find this look online/i }));
   fireEvent.click(await screen.findByRole("button", { name: /shop on zara/i }));
-  await waitFor(() => expect(open).toHaveBeenCalled());
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith("https://shop.example/Zara", "_blank", "noopener,noreferrer");
+  expect(data().recordShopClick).not.toHaveBeenCalled();
   unmount();
 
-  fetch.mockClear();
-  fetch.mockReturnValueOnce(reply(RESPONSE)).mockReturnValue(reply({ ok: true }));
+  fetch.mockReturnValueOnce(reply(RESPONSE));
   render(<ShoppingPanel styleCaption="boho dress" firebaseUid="u1" />);
   fireEvent.click(screen.getByRole("button", { name: /find this look online/i }));
   fireEvent.click(await screen.findByRole("button", { name: /shop on zara/i }));
-  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-  const [url, opts] = fetch.mock.calls[1];
-  expect(url).toBe("http://localhost:8001/users/shopping/click");
-  expect(opts.method).toBe("POST");
-  expect(opts.headers).toEqual({ "Content-Type": "application/json" });
-  expect(bodyOf(fetch.mock.calls[1])).toEqual({ firebase_uid: "u1", brand: "Zara", item: "Maxi dress", tier: "Budget", est_price: 45, occasion: null });
+  expect(data().recordShopClick).toHaveBeenCalledWith("u1", RESPONSE.within_budget[1], undefined);
+});
+
+test("a failed click write is logged, not shown", async () => {
+  const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+  jest.spyOn(window, "open").mockImplementation(() => null);
+  data().recordShopClick.mockRejectedValueOnce(new Error("offline"));
+  fetch.mockReturnValueOnce(reply(RESPONSE));
+  render(<ShoppingPanel styleCaption="boho dress" firebaseUid="u1" />);
+  fireEvent.click(screen.getByRole("button", { name: /find this look online/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /shop on zara/i }));
+  await waitFor(() => expect(warn).toHaveBeenCalledWith("Shop click not recorded:", "offline"));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("empty in-budget results point to stretch picks, and back", async () => {

@@ -1,6 +1,6 @@
 // Captures README screenshots of the running app.
-// Prerequisites: backend on :8001, `npm run emulators`, and the frontend
-// started with REACT_APP_USE_AUTH_EMULATOR=true (default URL below).
+// Prerequisites: backend on :8001, `npm run emulators` (Auth and Firestore), and the frontend
+// started with REACT_APP_USE_FIREBASE_EMULATORS=true (default URL below).
 // Usage: node scripts/capture-screenshots.mjs [appUrl] [chromePath]
 import { chromium } from "playwright-core";
 import { mkdirSync } from "node:fs";
@@ -27,7 +27,12 @@ await page.getByPlaceholder("Email").fill(EMAIL);
 await page.getByPlaceholder("Password").fill(PASSWORD);
 await shot("01-sign-up");
 await page.getByRole("button", { name: "Create account" }).click();
-if (!(await page.getByText("Start with your shape").isVisible({ timeout: 4000 }).catch(() => false))) {
+// The account already exists on reruns: fall back to signing in.
+const signedUp = await Promise.race([
+  page.getByText("Start with your shape").waitFor({ timeout: 15000 }).then(() => true),
+  page.getByRole("alert").waitFor({ timeout: 15000 }).then(() => false),
+]).catch(() => false);
+if (!signedUp) {
   await page.goto(`${APP}/#/login`);
   await page.getByPlaceholder("Email").fill(EMAIL);
   await page.getByPlaceholder("Password").fill(PASSWORD);

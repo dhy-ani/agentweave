@@ -67,7 +67,7 @@ The stages are presented in order, but real teams loop back: usability findings 
 
 **Why.** Six months later, nobody remembers why a choice was made. ADRs make trade-offs reviewable and stop old debates from restarting.
 
-**How AgentWeave applies this.** Candidate ADRs: React (CRA) plus FastAPI split; Firebase for auth; SQLAlchemy with `DATABASE_URL` (SQLite default); CLIP retrieval over a curated set instead of a generative model; rule-based body-shape classification on pose keypoints; ONNX for serving. Written as [ADRs 0001 to 0006](../adr/README.md), including two reversals found during this work: PyTorch serving to ONNX, and react-spring to a CSS transition.
+**How AgentWeave applies this.** Candidate ADRs: React (CRA) plus FastAPI split; Firebase for auth; Firestore for user data, guarded by Security Rules; CLIP retrieval over a curated set instead of a generative model; rule-based body-shape classification on pose keypoints; ONNX for serving. Written as [ADRs 0001 to 0007](../adr/README.md), including two reversals found during this work: PyTorch serving to ONNX, and react-spring to a CSS transition.
 
 Example skeleton:
 
@@ -128,7 +128,7 @@ Consequences: Smaller deploy and faster cold start; export step must be re-run a
 
 **Why.** A contract lets frontend and backend work in parallel and catches breaking changes in review.
 
-**How AgentWeave applies this.** FastAPI generates the OpenAPI schema and Swagger UI automatically ([FastAPI features](https://fastapi.tiangolo.com/features/)); Pydantic models type requests; the frontend reads `REACT_APP_API_URL`; the backend reads `DATABASE_URL`. CORS origins come from `CORS_ORIGINS`, oversize uploads return 413, and every setting is documented in `backend/.env.example`. Remaining gap: `/analyze-body` still reports "no person found" as HTTP 200 with an `error` field, kept for frontend compatibility.
+**How AgentWeave applies this.** FastAPI generates the OpenAPI schema and Swagger UI automatically ([FastAPI features](https://fastapi.tiangolo.com/features/)); Pydantic models type requests; the frontend reads `REACT_APP_API_URL`; the backend reads `FIREBASE_PROJECT_ID` to verify ID tokens. CORS origins come from `CORS_ORIGINS`, oversize uploads return 413, and every setting is documented in `backend/.env.example`. Remaining gap: `/analyze-body` still reports "no person found" as HTTP 200 with an `error` field, kept for frontend compatibility.
 
 ## 9. Testing strategy
 

@@ -1,5 +1,9 @@
 """
-AgentWeave / StyleGenie API.
+AgentWeave / StyleGenie API: a stateless ML service with no database.
+
+User data (profile, saved looks, swipes, shopping clicks, closet items) lives
+in Firestore and is read and written by the frontend. The /closet endpoints
+verify a Firebase ID token (auth.py) and only store or delete image files.
 
 Runs unchanged under uvicorn (local, Render) and as a Vercel Function, which
 detects the module-level `app` in this file (Vercel project root: backend/).
@@ -13,6 +17,10 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -23,13 +31,11 @@ logger = logging.getLogger("agentweave")
 
 from ai import model_cache  # noqa: E402
 from ai.body_shape_classifier import pose_model_loaded  # noqa: E402
-from db.database import engine  # noqa: E402
-from db.schema import init_schema  # noqa: E402
-from routers import user  # noqa: E402
+import auth  # noqa: E402
 from routers.analyze_body import router as analyze_body_router  # noqa: E402
+from routers.closet import STATIC_MOUNT, router as closet_router  # noqa: E402
 from routers.shopping import router as shopping_router  # noqa: E402
 from routers.stylegenie import router as stylegenie_router  # noqa: E402
-from routers.wardrobe import router as wardrobe_router  # noqa: E402
 from storage import LocalStorage, get_storage  # noqa: E402
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,8 +43,9 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_schema(engine)
-    logger.info("Database ready (%s); model backend: %s", engine.dialect.name, model_cache.backend_name())
+    auth.log_startup_config()
+    logger.info("Stateless ML service; model backend: %s; auth: %s; storage: %s",
+                model_cache.backend_name(), auth.auth_mode(), get_storage().name)
     yield
 
 
@@ -62,10 +69,19 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    try:
+        return await request_validation_exception_handler(request, exc)
+    except ValueError:
+        # The input cannot be echoed back as JSON (e.g. NaN in an embedding).
+        errors = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
+
 app.include_router(analyze_body_router)
 app.include_router(stylegenie_router)
-app.include_router(user.router)
-app.include_router(wardrobe_router)
+app.include_router(closet_router)
 app.include_router(shopping_router)
 
 
@@ -81,7 +97,7 @@ def health():
         "model_backend": model_cache.backend_name(),
         "models_loaded": {**model_cache.loaded_models(), "pose": pose_model_loaded()},
         "torch_imported": "torch" in sys.modules,
-        "database": engine.dialect.name,
+        "auth": auth.auth_mode(),
         "storage": get_storage().name,
     }
 
@@ -104,4 +120,8 @@ else:
     logger.warning("No curated image directory found; /images will 404")
 
 if isinstance(storage := get_storage(), LocalStorage):
-    app.mount("/wardrobe-images", StaticFiles(directory=storage.root), name="wardrobe-images")
+    # LocalStorage keeps closet images at <root>/closet/{uid}/{item_id}.jpg;
+    # routers/closet.py builds their image_url from this mount's name.
+    closet_dir = os.path.join(storage.root, "closet")
+    os.makedirs(closet_dir, exist_ok=True)
+    app.mount(f"/{STATIC_MOUNT}", StaticFiles(directory=closet_dir), name=STATIC_MOUNT)

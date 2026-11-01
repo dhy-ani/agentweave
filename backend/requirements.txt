@@ -1,5 +1,6 @@
-# Serving runtime only (Vercel / Render / local uvicorn). No torch: CLIP and
-# YOLOv8-pose run as ONNX models through onnxruntime (see ai/onnx_inference.py).
+# Serving runtime only (Vercel / Render / local uvicorn). No database (user data
+# lives in Firestore) and no torch: CLIP and YOLOv8-pose run as ONNX models
+# through onnxruntime (see ai/onnx_inference.py).
 # Training, evaluation and ONNX export dependencies: requirements-train.txt.
 fastapi==0.138.0
 uvicorn==0.49.0
@@ -9,6 +10,7 @@ pillow==12.2.0
 numpy==2.4.2
 onnxruntime==1.30.0
 tokenizers==0.23.2
-sqlalchemy==2.0.46
-psycopg[binary]==3.3.6
 httpx==0.28.1
+# Firebase ID token verification (auth.py); no firebase-admin.
+PyJWT[crypto]==2.15.1
+cryptography==49.0.0

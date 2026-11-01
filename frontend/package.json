@@ -18,14 +18,15 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "emulators": "npx --yes firebase-tools@14 emulators:start --only auth --project demo-agentweave",
+    "emulators": "npx --yes firebase-tools@14 emulators:start --only auth,firestore --project demo-agentweave",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "test:ci": "react-scripts test --watchAll=false --coverage",
-    "test:mutation": "stryker run"
+    "test:mutation": "stryker run",
+    "test:rules": "npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-agentweave \"node --test src/rules/*.test.mjs\""
   },
   "eslintConfig": {
     "extends": [
@@ -46,6 +47,7 @@
     ]
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@stryker-mutator/api": "^10.0.0",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/jest-runner": "^10.0.0",
