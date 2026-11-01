@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/agentweave/static/css/main.1a40c5d5.css",
+    "main.js": "/agentweave/static/js/main.4627b256.js",
+    "index.html": "/agentweave/index.html",
+    "main.1a40c5d5.css.map": "/agentweave/static/css/main.1a40c5d5.css.map",
+    "main.4627b256.js.map": "/agentweave/static/js/main.4627b256.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.1a40c5d5.css",
+    "static/js/main.4627b256.js"
+  ]
+}
