@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { CameraIcon } from "./icons";
-import { API } from "../config";
+import { apiRequest } from "../lib/api";
 import { resizeImage } from "../lib/resizeImage";
 
 const BodyTypeForm = ({ setBodyType, setLoading }) => {
@@ -23,15 +23,14 @@ const BodyTypeForm = ({ setBodyType, setLoading }) => {
       setLoading(true);
       const fd = new FormData();
       fd.append("file", await resizeImage(image));
-      const res = await fetch(`${API}/analyze-body`, { method: "POST", body: fd });
-      const data = await res.json();
+      const data = await apiRequest("/analyze-body", { method: "POST", body: fd });
       if (data.body_type && data.body_type !== "unknown") {
         setBodyType(data.body_type);
       } else {
         setError(data.error || data.detail || "We couldn't see a full body. Try a clear, front-facing full-length photo.");
       }
     } catch (err) {
-      setError("Upload failed. Check your connection and try again.");
+      setError(err.status === 413 ? err.message : "Upload failed. Check your connection and try again.");
     } finally {
       setLoading(false);
     }

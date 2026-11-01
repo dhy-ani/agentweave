@@ -1,0 +1,10 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "closet",
+      "fieldPath": "embedding",
+      "indexes": []
+    }
+  ]
+}

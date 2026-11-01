@@ -2,8 +2,8 @@
 Shared test setup.
 
 Environment variables are set *before* any application module is imported:
-db.database reads DATABASE_URL, image_io reads AGENTWEAVE_MAX_UPLOAD_MB and
-main mounts the upload directory at import time. settings.py loads backend/.env
+image_io reads AGENTWEAVE_MAX_UPLOAD_MB and main mounts the upload directory at
+import time. settings.py loads backend/.env
 with setdefault semantics, so explicit values here always win over a
 developer's local .env (e.g. a real BLOB_READ_WRITE_TOKEN is never used).
 """
@@ -25,7 +25,6 @@ _SESSION_TMP = Path(tempfile.mkdtemp(prefix="agentweave-tests-"))
 REAL_MODEL_DIR = str(BACKEND_DIR / "ai" / "models")
 
 os.environ.update({
-    "DATABASE_URL": f"sqlite:///{(_SESSION_TMP / 'session.db').as_posix()}",
     "AGENTWEAVE_UPLOAD_DIR": str(_SESSION_TMP / "uploads"),
     # Empty model dir + unroutable release URL: a test that accidentally
     # reaches for a real model fails fast instead of loading or downloading one.
@@ -38,16 +37,16 @@ os.environ.update({
     "VERCEL": "",
     "CORS_ORIGINS": "",
     "LOG_LEVEL": "WARNING",
+    # Real signature verification against the test keypair (tests/tokens.py);
+    # a developer's emulator setting in backend/.env must not leak in.
+    "FIREBASE_PROJECT_ID": "demo-test",
+    "FIREBASE_AUTH_EMULATOR_HOST": "",
 })
 
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
+import auth  # noqa: E402
 from ai import body_shape_classifier, model_cache  # noqa: E402
-from db import database  # noqa: E402
-from db.schema import init_schema  # noqa: E402
 from storage import LocalStorage  # noqa: E402
+from tests import tokens  # noqa: E402
 from tests.fakes import FakeClipBackend, FakePose, body_keypoints, make_corpus  # noqa: E402
 
 
@@ -61,7 +60,6 @@ def pytest_sessionstart(session):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    database.engine.dispose()  # release the SQLite file so Windows can delete it
     if os.getpid() == _OWNER_PID:  # never from a forked mutmut worker
         shutil.rmtree(_SESSION_TMP, ignore_errors=True)
 
@@ -85,49 +83,45 @@ def fake_pose():
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(monkeypatch):
-    """Fresh in-memory database per test. db.database.get_db resolves
-    SessionLocal at call time, so the real dependency serves this engine."""
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    init_schema(engine)
-    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    monkeypatch.setattr(database, "SessionLocal", session_factory)
-    yield session_factory
-    engine.dispose()
+def signing_certs(monkeypatch):
+    """Google's cert endpoint is replaced by the test cert (no network). Tests
+    sign tokens with tests.tokens; `fetches` counts cert downloads."""
+    state = {"certs": {tokens.KID: tokens.keypair()[1]}, "max_age": 3600, "fetches": 0}
 
+    def fetch():
+        state["fetches"] += 1
+        return dict(state["certs"]), state["max_age"]
 
-@pytest.fixture
-def db_session(isolated_db):
-    session = isolated_db()
-    try:
-        yield session
-    finally:
-        session.close()
+    monkeypatch.setattr(auth, "_cert_cache", auth.CertCache(fetch=fetch))
+    return state
 
 
 @pytest.fixture
 def corpus(monkeypatch):
     """Small synthetic trend corpus used by the retrieval endpoints."""
+    import routers.closet
     import routers.stylegenie
-    import routers.wardrobe
 
     fake = make_corpus()
     monkeypatch.setattr(routers.stylegenie, "get_corpus", lambda: fake)
-    monkeypatch.setattr(routers.wardrobe, "get_corpus", lambda: fake)
+    monkeypatch.setattr(routers.closet, "get_corpus", lambda: fake)
     return fake
 
 
 @pytest.fixture
-def upload_storage(tmp_path, monkeypatch):
+def upload_storage(monkeypatch):
+    """LocalStorage at AGENTWEAVE_UPLOAD_DIR, the directory main mounted at
+    /closet-images on import, so uploaded image URLs resolve; emptied after each test."""
     import main
-    import routers.wardrobe
+    import routers.closet
 
-    store = LocalStorage(str(tmp_path / "uploads"))
-    monkeypatch.setattr(routers.wardrobe, "get_storage", lambda: store)
+    store = LocalStorage(os.environ["AGENTWEAVE_UPLOAD_DIR"])
+    monkeypatch.setattr(routers.closet, "get_storage", lambda: store)
     monkeypatch.setattr(main, "get_storage", lambda: store)
-    return store
+    yield store
+    closet_dir = Path(store.root) / "closet"
+    shutil.rmtree(closet_dir, ignore_errors=True)
+    closet_dir.mkdir(parents=True, exist_ok=True)  # the static mount needs it to exist
 
 
 @pytest.fixture

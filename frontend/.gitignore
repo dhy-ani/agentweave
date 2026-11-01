@@ -32,3 +32,4 @@ yarn-error.log*
 /reports
 stryker-tmp
 firebase-debug.log
+firestore-debug.log

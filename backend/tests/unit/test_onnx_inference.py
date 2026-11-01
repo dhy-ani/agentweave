@@ -347,3 +347,14 @@ def test_pose_decode_removes_horizontal_padding():
     pose, _ = _pose_with(_raw_predictions(best=1, kpts_xy=xy))
     kpts = pose.keypoints(Image.new("RGB", (160, 320)))
     assert kpts[0] == pytest.approx([50 / 160, 50 / 320])
+
+
+def test_preprocess_clip_image_resizes_short_side_then_centre_crops_long_side():
+    # 2x4 portrait with four distinct rows: the long side scales to 448 before the crop.
+    img = Image.new("RGB", (2, 4))
+    for y, value in enumerate((0, 80, 160, 240)):
+        for x in range(2):
+            img.putpixel((x, y), (value, value, value))
+    resized = img.resize((224, 448), Image.Resampling.BICUBIC).crop((0, 112, 224, 336))
+    expected = (np.asarray(resized, dtype=np.float32).transpose(2, 0, 1) / 255.0 - CLIP_MEAN) / CLIP_STD
+    np.testing.assert_allclose(preprocess_clip_image(img), expected, atol=1e-6)

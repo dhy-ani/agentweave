@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// Data model (all user data is owned by, and only visible to, that user):
+//   users/{uid}                      profile
+//   users/{uid}/savedLooks/{lookId}  inspiration board (create / read / delete)
+//   users/{uid}/swipes/{imageKey}    latest like or pass per look (upsert)
+//   users/{uid}/closet/{itemId}      clothing items + CLIP embedding
+//   users/{uid}/shopClicks/{clickId} append-only shopping analytics
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isString(v, maxLen) {
+      return v is string && v.size() <= maxLen;
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || data[key] == null || isString(data[key], maxLen);
+    }
+
+    function isNowTimestamp(v) {
+      return v is timestamp && v == request.time;
+    }
+
+    match /users/{uid} {
+      function validProfileFields(d) {
+        return d.keys().hasOnly(['email', 'displayName', 'bodyType', 'gender', 'createdAt', 'updatedAt'])
+          && isOptionalString(d, 'email', 320)
+          && isOptionalString(d, 'displayName', 128)
+          && isOptionalString(d, 'bodyType', 32)
+          && isOptionalString(d, 'gender', 32);
+      }
+
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validProfileFields(request.resource.data)
+        && isNowTimestamp(request.resource.data.createdAt)
+        && isNowTimestamp(request.resource.data.updatedAt);
+      allow update: if isOwner(uid)
+        && validProfileFields(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isNowTimestamp(request.resource.data.updatedAt);
+      allow delete: if isOwner(uid);
+
+      match /savedLooks/{lookId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['image', 'caption', 'matchScore', 'explanation', 'occasion', 'weather', 'savedAt'])
+          && request.resource.data.keys().hasAll(['image', 'caption', 'savedAt'])
+          && isString(request.resource.data.image, 255)
+          && isString(request.resource.data.caption, 2000)
+          && (!('matchScore' in request.resource.data) || (request.resource.data.matchScore is number
+              && request.resource.data.matchScore >= 0 && request.resource.data.matchScore <= 100))
+          && isOptionalString(request.resource.data, 'explanation', 2000)
+          && isOptionalString(request.resource.data, 'occasion', 64)
+          && isOptionalString(request.resource.data, 'weather', 32)
+          && isNowTimestamp(request.resource.data.savedAt);
+        allow update: if false;
+      }
+
+      match /swipes/{imageKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['image', 'caption', 'liked', 'occasion', 'recordedAt'])
+          && isString(request.resource.data.image, 255)
+          && isOptionalString(request.resource.data, 'caption', 2000)
+          && request.resource.data.liked is bool
+          && isOptionalString(request.resource.data, 'occasion', 64)
+          && isNowTimestamp(request.resource.data.recordedAt);
+      }
+
+      match /closet/{itemId} {
+        function validItem(d) {
+          return d.keys().hasOnly(['imageUrl', 'category', 'color', 'description', 'embedding', 'addedAt'])
+            && isString(d.imageUrl, 1024)
+            && d.category in ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory', 'other']
+            && isOptionalString(d, 'color', 64)
+            && isOptionalString(d, 'description', 500)
+            && d.embedding is list && d.embedding.size() == 512;
+        }
+
+        allow read, delete: if isOwner(uid);
+        // Item ids come from the API (uuid4 hex), which stores the image under the same id.
+        allow create: if isOwner(uid)
+          && itemId.matches('^[0-9a-f]{32}$')
+          && validItem(request.resource.data)
+          && isNowTimestamp(request.resource.data.addedAt);
+        // Only the editable labels may change after upload.
+        allow update: if isOwner(uid)
+          && validItem(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['color', 'description', 'category']);
+      }
+
+      match /shopClicks/{clickId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['brand', 'item', 'tier', 'estPrice', 'occasion', 'clickedAt'])
+          && isString(request.resource.data.brand, 128)
+          && isOptionalString(request.resource.data, 'item', 256)
+          && isOptionalString(request.resource.data, 'tier', 32)
+          && (!('estPrice' in request.resource.data) || request.resource.data.estPrice is number)
+          && isOptionalString(request.resource.data, 'occasion', 64)
+          && isNowTimestamp(request.resource.data.clickedAt);
+        allow update, delete: if false;
+      }
+    }
+
+    // Everything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -162,7 +162,7 @@ Guardrails: API error rate and p95 latency per endpoint; zero incidents of photo
 - Firebase Authentication availability for sign-in.
 - Retailer search URL formats remain stable; links break silently if a retailer changes its URL scheme.
 - The 205-image curated dataset is representative enough of the 24 aesthetics to give acceptable retrieval quality. Not yet evaluated with users.
-- Database is configured by `DATABASE_URL` (SQLite by default for local development).
+- User data is stored in Cloud Firestore and protected by Security Rules; the Firebase emulators are used for local development.
 
 ## 9. Risks
 

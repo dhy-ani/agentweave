@@ -38,18 +38,17 @@ The ONNX models are too large to commit. Their names, sizes and SHA-256 hashes a
 
 1. Import the GitHub repo as a new Vercel project and set **Root Directory** to `backend`. `backend/vercel.json` and `backend/.vercelignore` are picked up from there.
 2. Leave "Include files outside the root directory in the Build Step" on (the default). The build script `scripts/vercel_build.py` needs it to copy the curated images from `datasets/processedImages` and to download the models into the bundle.
-3. Storage, from the Vercel Marketplace or the Storage tab:
-   - **Postgres** (for example Neon): this sets `DATABASE_URL`. `postgres://` URLs are rewritten to the psycopg 3 driver automatically.
-   - **Blob store, public access**: this sets `BLOB_READ_WRITE_TOKEN` for wardrobe photos.
+3. Storage: from the Storage tab, add a **Blob store with public access**. This sets `BLOB_READ_WRITE_TOKEN` for closet photos. User data lives in Firestore (section 3a), so the backend has no database.
 4. Environment variables (see `backend/.env.example` for the full list):
 
    | Variable | Value |
    |---|---|
+   | `FIREBASE_PROJECT_ID` | `agentweave-e9cd8`. Used to verify Firebase ID tokens |
    | `CORS_ORIGINS` | `https://dhy-ani.github.io` (comma-separate any others) |
    | `AGENTWEAVE_MODEL_BASE_URL` | Only if you use a release tag other than `models-v1` |
    | `LOG_LEVEL` | `INFO` |
 
-5. Deploy, then check `GET https://<project>.vercel.app/health`. Expect `"model_backend": "onnx"`, `"torch_imported": false`, `"database": "postgresql"` and `"storage": "vercel-blob"`.
+5. Deploy, then check `GET https://<project>.vercel.app/health`. Expect `"model_backend": "onnx"`, `"torch_imported": false`, and `"storage": "vercel-blob"`.
 
 **Limits to keep in mind** ([Vercel Functions limits](https://vercel.com/docs/functions/limitations)):
 - Python bundle: 500 MB. This app is about 398 MB with models bundled. Setting `AGENTWEAVE_BUNDLE_MODELS=0` gives about 230 MB, with the models downloaded to `/tmp` on cold start instead.
@@ -68,7 +67,7 @@ echo '{"rootDirectory":"backend","framework":"fastapi","sourceFilesOutsideRootDi
 vercel api /v9/projects/agentweave-api -X PATCH --input body.json
 vercel link --yes --project agentweave-api
 vercel blob create-store agentweave-wardrobe --access public -e production -e preview -e development --yes
-vercel integration add neon --name agentweave-db --plan free_v3   # sets DATABASE_URL
+printf 'agentweave-e9cd8' | vercel env add FIREBASE_PROJECT_ID production
 printf 'https://dhy-ani.github.io,http://localhost:3000' | vercel env add CORS_ORIGINS production
 vercel deploy --prod
 vercel git connect https://github.com/dhy-ani/agentweave.git      # enables deploy-on-push
@@ -77,6 +76,19 @@ vercel git connect https://github.com/dhy-ani/agentweave.git      # enables depl
 Deploying with the CLI from the repo root uses the root `.vercelignore`, which uploads only `backend/` and `datasets/processedImages/`. Git-triggered builds use `backend/.vercelignore`.
 
 `vercel git connect` only works once the Vercel GitHub App has access to the repository. Grant it at GitHub > Settings > Applications > Vercel > Configure > Repository access.
+
+## 3a. Firestore and Firebase Auth
+
+1. In the [Firebase console](https://console.firebase.google.com/), open the project and create a **Firestore database** in production mode (rules deny everything until you deploy your own).
+2. Enable the **Email/Password** and **Google** sign-in providers under Authentication.
+3. Deploy the rules and indexes from `frontend/`:
+
+   ```bash
+   npx firebase-tools@14 login
+   npx firebase-tools@14 deploy --only firestore:rules,firestore:indexes --project agentweave-e9cd8
+   ```
+
+4. Run `npm run test:rules` before every rules change. The rules are the only thing standing between users' data, so treat them as code.
 
 ## 3. Frontend on GitHub Pages
 
@@ -91,11 +103,12 @@ In the Firebase console, add `dhy-ani.github.io` to Authentication > Settings > 
 
 ## 4. Alternative: Render
 
-`render.yaml` deploys the same backend as a long-running web service. The ONNX runtime fits within much smaller instances than the old PyTorch stack did. Render's disk isn't persistent on the free tier either, so set `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` there as well.
+`render.yaml` deploys the same backend as a long-running web service. The ONNX runtime fits within much smaller instances than the old PyTorch stack did. Render's disk isn't persistent on the free tier either, so set `FIREBASE_PROJECT_ID` and `BLOB_READ_WRITE_TOKEN` there as well.
 
 ## 5. Release checklist
 - [ ] CI is green (frontend tests and build, backend tests).
 - [ ] The model release tag in the manifest exists and its hashes match.
-- [ ] `/health` on the preview deployment reports ONNX, no torch, Postgres and Blob.
+- [ ] `/health` on the preview deployment reports ONNX, no torch and Blob.
+- [ ] `firestore.rules` deployed and `npm run test:rules` green.
 - [ ] One manual run through the full flow on the preview URL: sign in, body photo, preferences, swipe, save, Saved tab, Shop, Closet upload.
 - [ ] `REACT_APP_API_URL` points at the production backend.

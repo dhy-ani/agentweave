@@ -7,6 +7,7 @@ Short records of significant technical decisions, in the format proposed by Mich
 | [0001](0001-retrieval-over-generation.md) | Recommend by retrieval over a curated image set, not by generating images or text | Accepted |
 | [0002](0002-lora-fine-tuning.md) | Adapt CLIP with LoRA instead of full fine-tuning | Accepted |
 | [0003](0003-onnx-serving.md) | Serve models with ONNX Runtime, not PyTorch | Accepted |
-| [0004](0004-vercel-stateless-backend.md) | Run the API on Vercel Functions with external state | Accepted (supersedes Render-only hosting) |
+| [0004](0004-vercel-stateless-backend.md) | Run the API on Vercel Functions with external state | Accepted (supersedes Render-only hosting); database part superseded by 0007 |
 | [0005](0005-css-swipe-animation.md) | Drive the swipe animation with CSS and a timer, not react-spring | Accepted |
 | [0006](0006-mutation-testing.md) | Gate quality with mutation testing, not line coverage alone | Accepted |
+| [0007](0007-firestore-user-data.md) | Store user data in Firestore and verify Firebase ID tokens in the API | Accepted |

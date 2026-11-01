@@ -23,6 +23,12 @@ jobs:
       - run: npm run test:ci
         env:
           CI: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Firestore Security Rules tests (emulator)
+        run: npm run test:rules
       - run: npm run build
         env:
           CI: true

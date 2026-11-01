@@ -1,6 +1,7 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import FashionCard, { matchTone } from "./FashionCard";
+import { SWIPE_OUT_MS } from "../lib/swipe";
 
 const props = {
   image: "boho_beach_3.jpg",
@@ -86,4 +87,83 @@ describe("drag gestures", () => {
 test("works without an onSwipe handler", async () => {
   render(<FashionCard {...props} />);
   expect(() => fireEvent.click(screen.getByRole("button", { name: "Like" }))).not.toThrow();
+});
+
+describe("swipe feedback", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const card = () => screen.getByTestId("swipe-card");
+  const finish = () => act(() => { jest.advanceTimersByTime(SWIPE_OUT_MS); });
+
+  test.each([
+    ["Like", "LIKE", "translate(800px, 0px) rotate(25deg)"],
+    ["Pass", "PASS", "translate(-800px, 0px) rotate(-25deg)"],
+  ])("%s stamps the card, flies it out, then resets", (label, stamp, flyOut) => {
+    const onSwipe = jest.fn();
+    render(<FashionCard {...props} onSwipe={onSwipe} />);
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(screen.getByText(stamp)).toBeInTheDocument();
+    expect(screen.queryByText("SAVED")).not.toBeInTheDocument();
+    expect(card().style.transform).toBe(flyOut);
+    expect(onSwipe).not.toHaveBeenCalled();
+    finish();
+    expect(onSwipe).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(stamp)).not.toBeInTheDocument();
+    expect(card().style.transform).toBe("translate(0px, 0px) rotate(0deg)");
+  });
+
+  test("Save shows the saved overlay and no like/pass stamp", () => {
+    render(<FashionCard {...props} onSwipe={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("SAVED")).toBeInTheDocument();
+    expect(screen.queryByText("LIKE")).not.toBeInTheDocument();
+    expect(screen.queryByText("PASS")).not.toBeInTheDocument();
+  });
+
+  test("a second tap during the fly-out is ignored", () => {
+    const onSwipe = jest.fn();
+    render(<FashionCard {...props} onSwipe={onSwipe} />);
+    fireEvent.click(screen.getByRole("button", { name: "Like" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pass" }));
+    finish();
+    expect(onSwipe).toHaveBeenCalledTimes(1);
+    expect(onSwipe).toHaveBeenCalledWith("right");
+  });
+
+  test("unmounting mid-swipe cancels the callback", () => {
+    const onSwipe = jest.fn();
+    const { unmount } = render(<FashionCard {...props} onSwipe={onSwipe} />);
+    fireEvent.click(screen.getByRole("button", { name: "Like" }));
+    unmount();
+    finish();
+    expect(onSwipe).not.toHaveBeenCalled();
+  });
+
+  test("the card follows the pointer without a transition, then snaps back with one", () => {
+    render(<FashionCard {...props} onSwipe={() => {}} />);
+    expect(card().style.transition).toBe(`transform ${SWIPE_OUT_MS}ms ease-out`);
+    fireEvent.mouseDown(card(), { buttons: 1, clientX: 200, clientY: 300 });
+    fireEvent.mouseMove(window, { buttons: 1, clientX: 236, clientY: 310 });
+    expect(card().style.transform).toBe("translate(36px, 10px) rotate(3deg)");
+    expect(card().style.transition).toBe("none");
+    fireEvent.mouseUp(window, { buttons: 0, clientX: 236, clientY: 310 });
+    expect(card().style.transform).toBe("translate(0px, 0px) rotate(0deg)");
+    expect(card().style.transition).toBe(`transform ${SWIPE_OUT_MS}ms ease-out`);
+  });
+
+  test("a finished drag ends dragging mode", () => {
+    render(<FashionCard {...props} onSwipe={() => {}} />);
+    fireEvent.mouseDown(card(), { buttons: 1, clientX: 200, clientY: 300 });
+    fireEvent.mouseMove(window, { buttons: 1, clientX: 400, clientY: 300 });
+    fireEvent.mouseUp(window, { buttons: 0, clientX: 400, clientY: 300 });
+    expect(card().style.transition).toBe(`transform ${SWIPE_OUT_MS}ms ease-out`);
+    expect(screen.getByText("LIKE")).toBeInTheDocument();
+  });
+});
+
+test("without a caption or explanation the card still has alt text and no empty line", () => {
+  render(<FashionCard image="a.jpg" match_score={50} onSwipe={() => {}} />);
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Outfit");
+  expect(screen.getByTestId("swipe-card").querySelectorAll("p.text-xs")).toHaveLength(0);
 });

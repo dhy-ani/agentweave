@@ -17,9 +17,20 @@ def test_health_reports_runtime_without_torch(client):
         "model_backend": "onnx",
         "models_loaded": {"clip_vision": True, "clip_text": True, "pose": True},
         "torch_imported": False,
-        "database": "sqlite",
+        "auth": "firebase",
         "storage": "local",
     }
+
+
+def test_health_reports_emulator_auth_mode(client, monkeypatch):
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
+    assert client.get("/health").json()["auth"] == "firebase-emulator"
+
+
+def test_removed_database_endpoints_are_gone(client):
+    assert client.post("/users/upsert", json={}).status_code == 404
+    assert client.post("/users/shopping/click", json={}).status_code == 404
+    assert client.get("/wardrobe/items", params={"firebase_uid": "a"}).status_code == 404
 
 
 def test_cors_allows_default_frontend_origin(client):

@@ -15,6 +15,6 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.10"
-      - key: DATABASE_URL
-        value: sqlite:///./agentweave.db
+      - key: FIREBASE_PROJECT_ID
+        value: agentweave-e9cd8
     autoDeploy: true

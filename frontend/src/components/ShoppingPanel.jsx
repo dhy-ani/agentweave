@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { BagIcon, SpinnerIcon, SparkleIcon } from "./icons";
-import { API } from "../config";
+import { apiRequest } from "../lib/api";
+import { recordShopClick } from "../data/userData";
 import { PRESETS, nextMin, nextMax, formatBudget, isActivePreset } from "../lib/budget";
 
 const TIER_STYLES = {
@@ -29,22 +30,11 @@ function PriceSlider({ label, value, min, max, step = 5, onChange }) {
 function BrandCard({ s, isOutside, firebaseUid, occasion }) {
   const styles = TIER_STYLES[s.tier] || TIER_STYLES.Budget;
 
-  const handleClick = async () => {
+  // Open the retailer immediately; the click is recorded for analytics in the background.
+  const handleClick = () => {
     if (firebaseUid) {
-      try {
-        await fetch(`${API}/users/shopping/click`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            firebase_uid: firebaseUid,
-            brand: s.brand,
-            item: s.item,
-            tier: s.tier,
-            est_price: s.est_price,
-            occasion: occasion || null,
-          }),
-        });
-      } catch {}
+      // Stryker disable next-line all: best-effort analytics write
+      recordShopClick(firebaseUid, s, occasion).catch((e) => console.warn("Shop click not recorded:", e.message));
     }
     window.open(s.search_url, "_blank", "noopener,noreferrer");
   };
@@ -104,20 +94,17 @@ export default function ShoppingPanel({ styleCaption, occasion, bodyType, gender
     setResults(null);
     setError("");
     try {
-      const r = await fetch(`${API}/shopping/suggest`, {
+      setResults(await apiRequest("/shopping/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        json: {
           style_caption: styleCaption,
           occasion: occasion || "casual",
           body_type: bodyType || "",
           gender: gender || "",
           price_min: priceMin,
           price_max: priceMax,
-        }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setResults(await r.json());
+        },
+      }));
     } catch (e) {
       setError("Could not load store suggestions. Please try again.");
     } finally {

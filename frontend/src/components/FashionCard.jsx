@@ -72,7 +72,7 @@ const FashionCard = ({ image, result, trendiness_score, match_score, future_proj
 
         {stamp && (
           <div className="absolute inset-0 bg-canvas/40 flex items-center justify-center">
-            <span className={`flex items-center gap-2 text-4xl font-black rounded-xl px-4 py-1 tracking-widest border-4 ${
+            <span className={`flex items-center gap-2 text-4xl font-bold rounded-xl px-4 py-1 tracking-widest border-4 ${
               swipeDir === "right" ? "text-sage-700 border-sage-500 -rotate-12" : "text-ink border-ink rotate-12"
             }`}>
               <span aria-hidden="true">{stamp.emoji}</span> {stamp.text}
@@ -81,7 +81,7 @@ const FashionCard = ({ image, result, trendiness_score, match_score, future_proj
         )}
         {swipeDir === "up" && (
           <div className="absolute inset-0 bg-brand-200/40 flex items-center justify-center">
-            <span className="flex items-center gap-2 text-2xl font-black text-brand-600 border-4 border-brand-400 rounded-xl px-4 py-2 tracking-widest">
+            <span className="flex items-center gap-2 text-2xl font-bold text-brand-600 border-4 border-brand-400 rounded-xl px-4 py-2 tracking-widest">
               SAVED <SparkleIcon className="w-6 h-6" />
             </span>
           </div>
